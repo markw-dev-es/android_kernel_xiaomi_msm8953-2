@@ -230,11 +230,6 @@ typedef struct sLimTimers
     TX_TIMER           gLimFTPreAuthRspTimer;
 #endif
 
-#ifdef WLAN_FEATURE_LFR_MBB
-    TX_TIMER           glim_pre_auth_mbb_rsp_timer;
-    TX_TIMER           glim_reassoc_mbb_rsp_timer;
-#endif
-
 #ifdef FEATURE_WLAN_ESE
     TX_TIMER           gLimEseTsmTimer;
 #endif
@@ -264,12 +259,6 @@ typedef struct {
     tANI_U32 failed_count[MAX_TIDS];
     v_TIME_t failed_timestamp[MAX_TIDS];
 } tLimStaBAInfo;
-
-typedef struct {
-   bool tx_aggr;
-   uint8_t sta_id;
-   uint8_t tid;
-} t_test_status_bainfo;
 
 typedef struct sAniSirLim
 {
@@ -925,7 +914,6 @@ tLimMlmOemDataRsp       *gpLimMlmOemDataRsp;
     tANI_U32 txBdToken;
     tANI_U32 EnableTdls2040BSSCoexIE;
     tLimStaBAInfo staBaInfo[WLAN_MAX_STA_COUNT];
-    t_test_status_bainfo test_status_bainfo;
 } tAniSirLim, *tpAniSirLim;
 
 typedef struct sLimMgmtFrameRegistration

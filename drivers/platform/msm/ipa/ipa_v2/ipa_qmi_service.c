@@ -1,5 +1,4 @@
 /* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2017 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +25,7 @@
 
 #include "ipa_qmi_service.h"
 #include "ipa_ram_mmap.h"
+#include "../ipa_common_i.h"
 
 #define IPA_Q6_SVC_VERS 1
 #define IPA_A5_SVC_VERS 1
@@ -1062,7 +1062,7 @@ int vote_for_bus_bw(uint32_t *bw_mbps)
 
 	memset(&profile, 0, sizeof(profile));
 	profile.max_supported_bandwidth_mbps = *bw_mbps;
-	ret = ipa2_rm_set_perf_profile(IPA_RM_RESOURCE_Q6_PROD,
+	ret = ipa_rm_set_perf_profile(IPA_RM_RESOURCE_Q6_PROD,
 			&profile);
 	if (ret)
 		IPAWANERR("Failed to set perf profile to BW %u\n",

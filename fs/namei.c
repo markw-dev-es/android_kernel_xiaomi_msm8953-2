@@ -3271,6 +3271,8 @@ out2:
 				error = -ESTALE;
 		}
 		file = ERR_PTR(error);
+	} else {
+		global_filetable_add(file);
 	}
 	return file;
 }

@@ -3166,9 +3166,6 @@ static int sd_resume(struct device *dev)
 	if (!sdkp)
 		return 0;	/* this can happen */
 
-	if (!sdkp)	/* E.g.: runtime resume at the start of sd_probe() */
-		return 0;
-
 	if (!sdkp->device->manage_start_stop)
 		goto done;
 

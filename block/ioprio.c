@@ -2,7 +2,6 @@
  * fs/ioprio.c
  *
  * Copyright (C) 2004 Jens Axboe <axboe@kernel.dk>
- * Copyright (C) 2017 XiaoMi, Inc.
  *
  * Helper functions for setting/querying io priorities of processes. The
  * system calls closely mimmick getpriority/setpriority, see the man page for

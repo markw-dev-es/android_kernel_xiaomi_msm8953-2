@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -257,6 +257,7 @@ eHalStatus wlan_hdd_remain_on_channel_callback( tHalHandle hHal, void* pCtx,
                 NULL, 0 );
     }
     mutex_lock(&pHddCtx->roc_lock);
+    pRemainChanCtx = cfgState->remain_on_chan_ctx;
     if ( pRemainChanCtx )
     {
         /* Trigger kernel panic if ROC timer state is not set to unused state
@@ -271,14 +272,13 @@ eHalStatus wlan_hdd_remain_on_channel_callback( tHalHandle hHal, void* pCtx,
         {
             vos_mem_free(pRemainChanCtx->action_pkt_buff.frame_ptr);
         }
+        hddLog( LOG1, FL(
+                    "Freeing ROC ctx cfgState->remain_on_chan_ctx=%p"),
+                cfgState->remain_on_chan_ctx);
+        vos_mem_free( pRemainChanCtx );
+        pRemainChanCtx = NULL;
+        cfgState->remain_on_chan_ctx = NULL;
     }
-
-    hddLog( LOG1, FL(
-                "Freeing ROC ctx cfgState->remain_on_chan_ctx=%p"),
-            cfgState->remain_on_chan_ctx);
-    vos_mem_free( pRemainChanCtx );
-    pRemainChanCtx = NULL;
-    cfgState->remain_on_chan_ctx = NULL;
     mutex_unlock(&pHddCtx->roc_lock);
     if (eHAL_STATUS_SUCCESS != status)
         complete(&pAdapter->rem_on_chan_ready_event);
@@ -771,10 +771,13 @@ static int wlan_hdd_request_remain_on_channel( struct wiphy *wiphy,
        return -EBUSY;
     }
 
-    /* When P2P-GO and if we are trying to unload the driver then
-     * wlan driver is keep on receiving the remain on channel command
-     * and which is resulting in crash. So not allowing any remain on
-     * channel requets when Load/Unload is in progress*/
+    if (TRUE == pHddCtx->btCoexModeSet)
+    {
+        VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+           FL("BTCoex Mode operation in progress"));
+        return -EBUSY;
+    }
+
     if(hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx, NULL,
                                    NULL))
     {
@@ -1782,11 +1785,25 @@ void hdd_sendActionCnf( hdd_adapter_t *pAdapter, tANI_BOOLEAN actionSendSuccess 
 
     cfgState->actionFrmState = HDD_IDLE;
 
-    hddLog( LOG1, "Send Action cnf, actionSendSuccess %d", actionSendSuccess);
     if( NULL == cfgState->buf )
     {
         return;
     }
+    if (cfgState->is_go_neg_ack_received)
+    {
+        cfgState->is_go_neg_ack_received = 0;
+        /* Sometimes its possible that host may receive the ack for GO
+         * negotiation req after sending go negotaition confirmation,
+         * in such case drop the ack received for the go negotiation
+         * request, so that supplicant waits for the confirmation ack
+         * from firmware.
+         */
+        hddLog( LOG1, FL("Drop the pending ack received in cfgState->actionFrmState %d"),
+                cfgState->actionFrmState);
+        return;
+    }
+
+    hddLog( LOG1, "Send Action cnf, actionSendSuccess %d", actionSendSuccess);
 
     /* If skb is NULL it means this packet was received on CFG80211 interface
      * else it was received on Monitor interface */
@@ -2628,6 +2645,8 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
              {
                  hddLog(LOG1, "%s: ACK_PENDING and But received RESP for Action frame ",
                          __func__);
+                 cfgState->is_go_neg_ack_received = 1;
+
                  hdd_sendActionCnf(pAdapter, TRUE);
              }
             }

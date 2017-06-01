@@ -2,7 +2,6 @@
  * cdc_ncm.c
  *
  * Copyright (C) ST-Ericsson 2010-2012
- * Copyright (C) 2017 XiaoMi, Inc.
  * Contact: Alexey Orishko <alexey.orishko@stericsson.com>
  * Original author: Hans Petter Selasky <hans.petter.selasky@stericsson.com>
  *

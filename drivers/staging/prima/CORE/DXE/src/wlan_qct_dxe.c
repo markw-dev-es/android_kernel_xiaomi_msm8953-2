@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1910,17 +1910,33 @@ static wpt_status dxeRXFrameSingleBufferAlloc
 
    /* First check if a packet pointer has already been provided by a previously
       invoked Rx packet available callback. If so use that packet. */
-   if(dxeCtxt->rxPalPacketUnavailable && (NULL != dxeCtxt->freeRXPacket))
+   if (dxeCtxt->rxPalPacketUnavailable)
    {
-      currentPalPacketBuffer = dxeCtxt->freeRXPacket;
-      dxeCtxt->rxPalPacketUnavailable = eWLAN_PAL_FALSE;
-      dxeCtxt->freeRXPacket = NULL;
-
-      if (channelEntry->doneIntDisabled)
+      if (NULL != dxeCtxt->freeRXPacket)
       {
-         wpalWriteRegister(channelEntry->channelRegister.chDXECtrlRegAddr,
-                           channelEntry->extraConfig.chan_mask);
-         channelEntry->doneIntDisabled = 0;
+         currentPalPacketBuffer = dxeCtxt->freeRXPacket;
+         dxeCtxt->rxPalPacketUnavailable = eWLAN_PAL_FALSE;
+         dxeCtxt->freeRXPacket = NULL;
+
+         if (channelEntry->doneIntDisabled)
+         {
+            wpalWriteRegister(channelEntry->channelRegister.chDXECtrlRegAddr,
+                              channelEntry->extraConfig.chan_mask);
+            channelEntry->doneIntDisabled = 0;
+         }
+      }
+      else if (VOS_TIMER_STATE_RUNNING !=
+               wpalTimerGetCurStatus(&dxeCtxt->rxResourceAvailableTimer))
+      {
+         if (eWLAN_PAL_STATUS_SUCCESS !=
+             wpalTimerStart(&dxeCtxt->rxResourceAvailableTimer,
+                            wpalGetDxeReplenishRXTimerVal()))
+         {
+             HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_FATAL,
+                      "RX resource available timer not started");
+         }
+         else
+            dxeEnvBlk.rx_low_resource_timer = 1;
       }
    }
    else if(!dxeCtxt->rxPalPacketUnavailable)
@@ -1942,8 +1958,15 @@ static wpt_status dxeRXFrameSingleBufferAlloc
          {
             HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                      "RX Low resource, wait available resource");
-            wpalTimerStart(&dxeCtxt->rxResourceAvailableTimer,
-                           wpalGetDxeReplenishRXTimerVal());
+            if (eWLAN_PAL_STATUS_SUCCESS !=
+                wpalTimerStart(&dxeCtxt->rxResourceAvailableTimer,
+                           wpalGetDxeReplenishRXTimerVal()))
+            {
+                HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_FATAL,
+                         "RX resource available timer not started");
+            }
+            else
+               dxeEnvBlk.rx_low_resource_timer = 1;
          }
 #endif
       }
@@ -3087,6 +3110,7 @@ void dxeRXPacketAvailableEventHandler
       wpalTimerGetCurStatus(&dxeCtxt->rxResourceAvailableTimer))
    {
       wpalTimerStop(&dxeCtxt->rxResourceAvailableTimer);
+      dxeEnvBlk.rx_low_resource_timer = 0;
    }
 #endif
 
@@ -3421,12 +3445,6 @@ static wpt_status dxeTXPushFrame
          //HDXE_ASSERT(0);
       }
 
-      if(wpalIsArpPkt(palPacket))
-      {
-         HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_ERROR,
-                  "%s :ARP packet", __func__);
-      }
-
       /* Everything is ready
        * Trigger to start DMA */
       status = wpalWriteRegister(channelEntry->channelRegister.chDXECtrlRegAddr,
@@ -3677,14 +3695,6 @@ static wpt_status dxeTXCompFrame
             }
             return status;
          }
-
-         if(wpalIsArpPkt(currentCtrlBlk->xfrFrame))
-         {
-             HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_ERROR,
-                      "%s :ARP packet DMA-ed ", __func__);
-             wpalUpdateTXArpFWdeliveredStats();
-         }
-
          hostCtxt->txCompCB(hostCtxt->clientCtxt,
                             currentCtrlBlk->xfrFrame,
                             eWLAN_PAL_STATUS_SUCCESS);

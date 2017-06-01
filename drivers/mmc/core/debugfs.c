@@ -2,7 +2,6 @@
  * Debugfs support for hosts and cards
  *
  * Copyright (C) 2008 Atmel Corporation
- * Copyright (C) 2017 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -33,6 +32,26 @@ module_param(fail_request, charp, 0);
 #endif /* CONFIG_FAIL_MMC_REQUEST */
 
 /* The debugfs functions are optimized away when CONFIG_DEBUG_FS isn't set. */
+static int mmc_ring_buffer_show(struct seq_file *s, void *data)
+{
+	struct mmc_host *mmc = s->private;
+
+	mmc_dump_trace_buffer(mmc, s);
+	return 0;
+}
+
+static int mmc_ring_buffer_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_ring_buffer_show, inode->i_private);
+}
+
+static const struct file_operations mmc_ring_buffer_fops = {
+	.open		= mmc_ring_buffer_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static int mmc_ios_show(struct seq_file *s, void *data)
 {
 	static const char *vdd_str[] = {
@@ -343,6 +362,12 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 		S_IRUSR | S_IWUSR, root,
 		&host->cmdq_thist_enabled))
 		goto err_node;
+
+#ifdef CONFIG_MMC_RING_BUFFER
+	if (!debugfs_create_file("ring_buffer", S_IRUSR,
+				root, host, &mmc_ring_buffer_fops))
+		goto err_node;
+#endif
 
 #ifdef CONFIG_MMC_CLKGATE
 	if (!debugfs_create_u32("clk_delay", (S_IRUSR | S_IWUSR),
@@ -734,9 +759,6 @@ static ssize_t mmc_bkops_stats_write(struct file *filp,
 	int err;
 
 	if (!card)
-		return cnt;
-
-	if (!access_ok(VERIFY_READ, ubuf, cnt))
 		return cnt;
 
 	stats = &card->bkops.stats;
