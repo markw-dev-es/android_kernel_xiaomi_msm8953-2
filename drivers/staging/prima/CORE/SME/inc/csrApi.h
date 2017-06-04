@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -519,7 +519,6 @@ typedef enum
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
     eCSR_ROAM_UPDATE_MAX_RATE_IND,
     eCSR_ROAM_LOST_LINK_PARAMS_IND,
-    eCSR_ROAM_UPDATE_SCAN_RESULT,
 }eRoamCmdStatus;
 
 
@@ -1199,6 +1198,11 @@ typedef struct tagCsrConfigParam
     v_U32_t PERtimerThreshold;
     v_U32_t PERroamTriggerPercent;
 #endif
+
+#ifdef WLAN_FEATURE_LFR_MBB
+    tANI_BOOLEAN enable_lfr_mbb;
+#endif
+
 #endif
 
     tANI_BOOLEAN ignorePeerErpInfo;
@@ -1519,16 +1523,8 @@ typedef struct tagCsrHandoffRequest
 {
     tCsrBssid bssid;
     tANI_U8 channel;
-    /* To check if its a REASSOC or a FASTREASSOC IOCTL */
-    tANI_U8 src;
 }tCsrHandoffRequest;
 #endif
-
-typedef enum {
-    REASSOC     = 0,
-    FASTREASSOC = 1,
-    CONNECT_CMD_USERSPACE = 2,
-} handoff_src;
 
 #if defined(FEATURE_WLAN_ESE) && defined(FEATURE_WLAN_ESE_UPLOAD)
 typedef struct tagCsrEseBeaconReqParams
@@ -1752,7 +1748,6 @@ eHalStatus csrSetBand(tHalHandle hHal, eCsrBand eBand);
 
 ---------------------------------------------------------------------------*/
 eCsrBand csrGetCurrentBand (tHalHandle hHal);
-
 
 #endif
 
