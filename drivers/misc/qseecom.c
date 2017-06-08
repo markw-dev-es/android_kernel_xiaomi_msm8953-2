@@ -2285,7 +2285,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 			(char *)(req.app_name));
 		spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
 		list_for_each_entry(entry,
-		&qseecom.registered_app_list_head, list){
+		&qseecom.registered_app_list_head, list) {
 			if (entry->app_id == app_id) {
 				entry->ref_cnt++;
 				break;
@@ -2674,7 +2674,35 @@ int __qseecom_process_fsm_key_svc_cmd(struct qseecom_dev_handle *data_ptr,
 			req_ptr, send_svc_ireq_ptr);
 		return -EINVAL;
 	}
+	if (((uintptr_t)req_ptr->cmd_req_buf <
+			data_ptr->client.user_virt_sb_base) ||
+		((uintptr_t)req_ptr->cmd_req_buf >=
+			(data_ptr->client.user_virt_sb_base +
+			data_ptr->client.sb_length))) {
+		pr_err("cmd buffer address not within shared bufffer\n");
+		return -EINVAL;
+	}
 
+	if (((uintptr_t)req_ptr->resp_buf <
+			data_ptr->client.user_virt_sb_base) ||
+		((uintptr_t)req_ptr->resp_buf >=
+			(data_ptr->client.user_virt_sb_base +
+			data_ptr->client.sb_length))) {
+		pr_err("response buffer address not within shared bufffer\n");
+		return -EINVAL;
+	}
+
+	if ((req_ptr->cmd_req_len == 0) || (req_ptr->resp_len == 0) ||
+		req_ptr->cmd_req_len > data_ptr->client.sb_length ||
+		req_ptr->resp_len > data_ptr->client.sb_length) {
+		pr_err("cmd buffer length or response buffer length not valid\n");
+		return -EINVAL;
+	}
+
+	if (req_ptr->cmd_req_len > UINT_MAX - req_ptr->resp_len) {
+		pr_err("Integer overflow detected in req_len & rsp_len, exiting now\n");
+		return -EINVAL;
+	}
 	reqd_len_sb_in = req_ptr->cmd_req_len + req_ptr->resp_len;
 	if (reqd_len_sb_in > data_ptr->client.sb_length) {
 		pr_err("Not enough memory to fit cmd_buf and resp_buf. ");

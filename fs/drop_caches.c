@@ -36,7 +36,11 @@ void drop_pagecache_sb(struct super_block *sb, void *unused)
 	spin_unlock(&inode_sb_list_lock);
 	iput(toput_inode);
 }
-
+void drop_pagecache(void)
+{
+	iterate_supers(drop_pagecache_sb, NULL);
+}
+EXPORT_SYMBOL_GPL(drop_pagecache);
 static void drop_slab(void)
 {
 	int nr_objects;

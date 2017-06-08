@@ -491,7 +491,7 @@ int snd_usb_parse_audio_interface(struct snd_usb_audio *chip, int iface_no)
 	dev = chip->dev;
 
 	/* parse the interface's altsettings */
-	iface = usb_ifnum_to_if(dev, iface_no);
+	iface = usb_ifnum_to_if (dev, iface_no);
 
 	num = iface->num_altsetting;
 

@@ -1351,7 +1351,6 @@ static int lpm_probe(struct platform_device *pdev)
 
 	if (IS_ERR_OR_NULL(lpm_root_node)) {
 		pr_err("%s(): Failed to probe low power modes\n", __func__);
-		put_online_cpus();
 		return PTR_ERR(lpm_root_node);
 	}
 
@@ -1391,7 +1390,6 @@ static int lpm_probe(struct platform_device *pdev)
 				__func__);
 		goto failed;
 	}
-	register_hotcpu_notifier(&lpm_cpu_nblk);
 	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
 	if (!module_kobj) {
 		pr_err("%s: cannot find kobject for module %s\n",
@@ -1399,7 +1397,7 @@ static int lpm_probe(struct platform_device *pdev)
 		ret = -ENOENT;
 		goto failed;
 	}
-
+        register_hotcpu_notifier(&lpm_cpu_nblk);
 	ret = create_cluster_lvl_nodes(lpm_root_node, module_kobj);
 	if (ret) {
 		pr_err("%s(): Failed to create cluster level nodes\n",
