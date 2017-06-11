@@ -4424,10 +4424,9 @@ CONFIG_EXFAT_SUPPORT_STLOG=y
 CONFIG_NTFS_RW=y
 
 #
-# Adreno Idler and KCAL Control
+# Adreno Idler
 #
 CONFIG_ADRENO_IDLER=y
-CONFIG_FB_MSM_MDSS_KCAL_CTRL=y
 
 #
 # Library routines
