@@ -52,8 +52,8 @@ FUNC_PACK()
         find . -type f -name "wlan.ko" | xargs cp -t $TEMP_DIR/modules
         find $TEMP_DIR -iname "wlan.ko" -exec /home/msdx321/workspace/android/toolchains/linaro-5.4.1/bin/aarch64-linux-gnu-strip --strip-debug {} \;
 		cd $TEMP_DIR
-		zip -r9 mKernel.zip ./*
-		mv mKernel.zip $OUT_DIR/mKernel-$DATE.zip
+		zip -r9 palodakernel.zip ./*
+		mv palodakernel.zip $OUT_DIR/palodakernel-$DATE.zip
 		cd $ROOT_DIR
 		FUNC_PRINT "Finish Packing"
 }
