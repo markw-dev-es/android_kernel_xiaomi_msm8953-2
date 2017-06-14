@@ -17,7 +17,7 @@ config PRONTO_WLAN
 
 #	depends on WLAN
 #	depends on CFG80211
-#        depends on WCNSS_CORE
+#       depends on WCNSS_CORE
 
 if PRIMA_WLAN != n || PRONTO_WLAN != n
 
