@@ -825,9 +825,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
 		ft5x06_data && ft5x06_data->client) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK
-                || *blank == FB_BLANK_NORMAL
-                || *blank == FB_BLANK_VSYNC_SUSPEND)
+		if (*blank == FB_BLANK_UNBLANK)
 			schedule_work(&ft5x06_data->fb_notify_work);
 		else if (*blank == FB_BLANK_POWERDOWN) {
 			flush_work(&ft5x06_data->fb_notify_work);
@@ -962,7 +960,7 @@ static int ft5x06_fw_upgrade_start(struct i2c_client *client,
 		/* Enter upgrade mode */
 		w_buf[0] = FT_UPGRADE_55;
 		ft5x06_i2c_write(client, &w_buf[0], 1);
-		msleep(FT_55_AA_DLY_NS);
+		usleep(FT_55_AA_DLY_NS);
 		w_buf[0] = FT_UPGRADE_AA;
 		ft5x06_i2c_write(client, &w_buf[0], 1);
 		if (i_ret < 0) {

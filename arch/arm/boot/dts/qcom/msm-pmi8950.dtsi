@@ -524,9 +524,9 @@
 			qcom,hyb-thres = <625>;
 			qcom,sync-dly-us = <800>;
 			qcom,fs-curr-ua = <20000>;
+			qcom,ibb-pwrup-dly = <8>;
 			qcom,led-strings-list = [00 01];
 			qcom,en-ext-pfet-sc-pro;
-			qcom,cons-sync-write-delay-us = <1000>;
 		};
 
 		flash_led: qcom,leds@d300 {
@@ -571,7 +571,7 @@
 				qcom,max-current = <1000>;
 				qcom,duration = <1280>;
 				qcom,id = <1>;
-				qcom,current = <625>;
+				qcom,current = <750>;
 			};
 
 			pmi8950_torch0: qcom,torch_0 {
@@ -593,7 +593,6 @@
 				qcom,id = <1>;
 				qcom,current = <100>;
 			};
-
 			pmi8950_torch2: qcom,torch_2 {
 				label = "torch";
 				qcom,led-name = "flashlight";

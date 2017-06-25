@@ -412,33 +412,6 @@ struct gsi_xfer_elem {
 };
 
 /**
- * gsi_gpi_channel_scratch - GPI protocol SW config area of
- * channel scratch
- *
- * @max_outstanding_tre: Used for the prefetch management sequence by the
- *                       sequencer. Defines the maximum number of allowed
- *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
- *                       prefetch will be limited by this configuration. It
- *                       is suggested to configure this value to IPA_IF
- *                       channel TLV queue size times element size. To disable
- *                       the feature in doorbell mode (DB Mode=1). Maximum
- *                       outstanding TREs should be set to 64KB
- *                       (or any value larger or equal to ring length . RLEN)
- * @outstanding_threshold: Used for the prefetch management sequence by the
- *                       sequencer. Defines the threshold (in Bytes) as to when
- *                       to update the channel doorbell. Should be smaller than
- *                       Maximum outstanding TREs. value. It is suggested to
- *                       configure this value to 2 * element size.
- */
-struct __packed gsi_gpi_channel_scratch {
-	uint64_t resvd1;
-	uint32_t resvd2:16;
-	uint32_t max_outstanding_tre:16;
-	uint32_t resvd3:16;
-	uint32_t outstanding_threshold:16;
-};
-
-/**
  * gsi_mhi_channel_scratch - MHI protocol SW config area of
  * channel scratch
  *
@@ -470,17 +443,15 @@ struct __packed gsi_gpi_channel_scratch {
  *                       sequencer. Defines the maximum number of allowed
  *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
  *                       prefetch will be limited by this configuration. It
- *                       is suggested to configure this value to IPA_IF
- *                       channel TLV queue size times element size.
- *                       To disable the feature in doorbell mode (DB Mode=1).
- *                       Maximum outstanding TREs should be set to 64KB
- *                       (or any value larger or equal to ring length . RLEN)
+ *                       is suggested to configure this value with the IPA_IF
+ *                       channel AOS queue size. To disable the feature in
+ *                       doorbell mode (DB Mode=1) Maximum outstanding TREs
+ *                       should be set to 64KB (or any value larger or equal
+ *                       to ring length . RLEN)
  * @outstanding_threshold: Used for the prefetch management sequence by the
  *                       sequencer. Defines the threshold (in Bytes) as to when
  *                       to update the channel doorbell. Should be smaller than
- *                       Maximum outstanding TREs. value. It is suggested to
- *                       configure this value to min(TLV_FIFO_SIZE/2,8) *
- *                       element size.
+ *                       Maximum outstanding TREs. value.
  */
 struct __packed gsi_mhi_channel_scratch {
 	uint64_t mhi_host_wp_addr;
@@ -513,18 +484,16 @@ struct __packed gsi_mhi_channel_scratch {
  *                       sequencer. Defines the maximum number of allowed
  *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
  *                       prefetch will be limited by this configuration. It
- *                       is suggested to configure this value to IPA_IF
- *                       channel TLV queue size times element size.
- *                       To disable the feature in doorbell mode (DB Mode=1)
- *                       Maximum outstanding TREs should be set to 64KB
- *                       (or any value larger or equal to ring length . RLEN)
+ *                       is suggested to configure this value with the IPA_IF
+ *                       channel AOS queue size. To disable the feature in
+ *                       doorbell mode (DB Mode=1) Maximum outstanding TREs
+ *                       should be set to 64KB (or any value larger or equal
+ *                       to ring length . RLEN)
  * @depcmd_hi_addr: Used to generate "Update Transfer" command
  * @outstanding_threshold: Used for the prefetch management sequence by the
  *                       sequencer. Defines the threshold (in Bytes) as to when
  *                       to update the channel doorbell. Should be smaller than
- *                       Maximum outstanding TREs. value. It is suggested to
- *                       configure this value to 2 * element size. for MBIM the
- *                       suggested configuration is the element size.
+ *                       Maximum outstanding TREs. value.
  */
 struct __packed gsi_xdci_channel_scratch {
 	uint32_t last_trb_addr:16;
@@ -544,7 +513,6 @@ struct __packed gsi_xdci_channel_scratch {
  *
  */
 union __packed gsi_channel_scratch {
-	struct __packed gsi_gpi_channel_scratch gpi;
 	struct __packed gsi_mhi_channel_scratch mhi;
 	struct __packed gsi_xdci_channel_scratch xdci;
 	struct __packed {

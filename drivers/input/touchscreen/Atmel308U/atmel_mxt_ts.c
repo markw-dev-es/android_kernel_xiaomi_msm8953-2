@@ -2642,7 +2642,6 @@ static int mxt_check_reg_init(struct mxt_data *data)
 {
 	struct device *dev = &data->client->dev;
 	int ret;
-	u8 tp_color;
 	u32 k = 0;
 
 	bool is_recheck = false, use_default_cfg = false;
@@ -4369,7 +4368,7 @@ static ssize_t mxt_wakeup_mode_store(struct device *dev,
 		return count;
 	}
 
-	error = kstrtoul(buf, 0, &val);
+	error = strict_strtoul(buf, 0, &val);
 
 	if (!error)
 		data->wakeup_gesture_mode = (u8)val;
@@ -4412,7 +4411,7 @@ static ssize_t  mxt_sensitive_mode_store(struct device *dev,
 	unsigned long val;
 	int error;
 
-	error = kstrtoul(buf, 0, &val);
+	error = strict_strtoul(buf, 0, &val);
 	if (!error) {
 		if (val == 1) {
 			error = mxt_sensitive_mode_switch(data, true);
@@ -5479,9 +5478,7 @@ static int fb_notifier_cb(struct notifier_block *self,
 
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && mxt_data) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK
-                || *blank == FB_BLANK_NORMAL
-                || *blank == FB_BLANK_VSYNC_SUSPEND) {
+		if (*blank == FB_BLANK_UNBLANK) {
 			dev_dbg(&mxt_data->client->dev, "##### UNBLANK SCREEN #####\n");
 			mxt_input_enable(mxt_data->input_dev);
 #ifdef TOUCH_WAKEUP_EVENT_RECORD

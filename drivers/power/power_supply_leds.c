@@ -4,6 +4,7 @@
  *  Copyright © 2007  Anton Vorontsov <cbou@mail.ru>
  *  Copyright © 2004  Szabolcs Gyurko
  *  Copyright © 2003  Ian Molton <spyro@f2s.com>
+ *  Copyright (C) 2017 XiaoMi, Inc.
  *
  *  Modified: 2004, Oct     Szabolcs Gyurko
  *
@@ -23,7 +24,11 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 {
 	union power_supply_propval status, bat_percent;
 
+
+
 	if (psy->get_property(psy, POWER_SUPPLY_PROP_STATUS, &status))
+		return;
+	if (psy->get_property(psy, POWER_SUPPLY_PROP_CAPACITY, &bat_percent))
 		return;
 
 	dev_dbg(psy->dev, "%s %d\n", __func__, status.intval);
@@ -51,7 +56,8 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 		break;
 	default:
 		{
-			led_trigger_event(psy->charging_red_trig, LED_OFF);      			        led_trigger_event(psy->charging_green_trig, LED_OFF);
+			led_trigger_event(psy->charging_red_trig, LED_OFF);
+			led_trigger_event(psy->charging_green_trig, LED_OFF);
 			led_trigger_event(psy->charging_blue_trig, LED_OFF);
 		}
 		break;
@@ -61,6 +67,7 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 static int power_supply_create_bat_triggers(struct power_supply *psy)
 {
 	int rc = 0;
+
 
 	psy->charging_red_trig_name = kasprintf(GFP_KERNEL,
 					"%s-red", psy->name);

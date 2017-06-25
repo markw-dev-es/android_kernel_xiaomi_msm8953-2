@@ -35,9 +35,12 @@
 #include "mdss_dba_utils.h"
 
 #define XO_CLK_RATE	19200000
+
 struct mutex gamma_lock;
 struct mutex ce_lock;
 int Gamma_mode = NATURE;
+
+
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
 /* Master structure to hold all the information about the DSI/panel */
@@ -47,7 +50,9 @@ static struct mdss_dsi_data *mdss_dsi_res;
 #define DSI_ENABLE_PC_LATENCY PM_QOS_DEFAULT_VALUE
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
+
 bool is_Lcm_Present = false;
+
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	struct irq_info *irq_info;
@@ -1307,6 +1312,8 @@ static int mdss_dsi_update_panel_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	ctrl_pdata->panel_mode = pinfo->mipi.mode;
 	mdss_panel_get_dst_fmt(pinfo->bpp, pinfo->mipi.mode,
 			pinfo->mipi.pixel_packing, &(pinfo->mipi.dst_format));
+	pinfo->cont_splash_enabled = 0;
+
 	return ret;
 }
 
@@ -1517,12 +1524,10 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		mdss_dsi_clk_ctrl(sctrl, sctrl->dsi_clk_handle,
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_ON);
 
-	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_LP) {
+	if (mdss_dsi_is_panel_on_lp(pdata)) {
 		pr_debug("%s: dsi_unblank with panel always on\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, false);
-		if (!ret)
-			ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1587,8 +1592,6 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		pr_debug("%s: low power state requested\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, true);
-		if (!ret)
-			ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1631,8 +1634,7 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			}
 			ATRACE_END("dsi_panel_off");
 		}
-		ctrl_pdata->ctrl_state &= ~(CTRL_STATE_PANEL_INIT |
-			CTRL_STATE_PANEL_LP);
+		ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
 	}
 
 error:
@@ -2713,7 +2715,6 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 	struct mdss_panel_info *pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	len = strlen(panel_cfg);
-	ctrl_pdata->panel_data.dsc_cfg_np_name[0] = '\0';
 	if (!len) {
 		/* no panel cfg chg, parse dt */
 		pr_debug("%s:%d: no cmd line cfg present\n",
@@ -2797,15 +2798,23 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 					strlcpy(cfg_np_name, str2,
 						MDSS_MAX_PANEL_LEN);
 				}
-				strlcpy(ctrl_pdata->panel_data.dsc_cfg_np_name,
-					cfg_np_name, MDSS_MAX_PANEL_LEN);
+			}
+
+			pr_debug("%s: cfg_np_name:%s\n", __func__, cfg_np_name);
+			if (str2) {
+				ctrl_pdata->panel_data.cfg_np =
+					of_get_child_by_name(dsi_pan_node,
+					cfg_np_name);
+				if (!ctrl_pdata->panel_data.cfg_np)
+					pr_warn("%s: can't find config node:%s. either no such node or bad name\n",
+						__func__, cfg_np_name);
 			}
 		}
-
-	        is_Lcm_Present = true;
-                return dsi_pan_node;
+		is_Lcm_Present = true;
+		return dsi_pan_node;
 	}
 end:
+
 	dsi_pan_node = mdss_dsi_pref_prim_panel(pdev);
 	is_Lcm_Present = false;
 exit:
@@ -2981,12 +2990,6 @@ static int mdss_dsi_cont_splash_config(struct mdss_panel_info *pinfo,
 			mdss_dsi_panel_pwm_enable(ctrl_pdata);
 		ctrl_pdata->ctrl_state |= (CTRL_STATE_PANEL_INIT |
 			CTRL_STATE_MDP_ACTIVE | CTRL_STATE_DSI_ACTIVE);
-
-		/*
-		 * MDP client removes this extra vote during splash reconfigure
-		 * for command mode panel from interface. DSI removes the vote
-		 * during suspend-resume for video mode panel.
-		 */
 		if (ctrl_pdata->panel_data.panel_info.type == MIPI_CMD_PANEL)
 			clk_handle = ctrl_pdata->mdp_clk_handle;
 		else
@@ -3646,8 +3649,10 @@ static int mdss_dsi_probe(struct platform_device *pdev)
 		pr_err("%s: Invalid DSI hw configuration\n", __func__);
 		goto error;
 	}
+
 	mutex_init(&gamma_lock);
 	mutex_init(&ce_lock);
+
 	mdss_dsi_config_clk_src(pdev);
 
 error:
@@ -4177,25 +4182,7 @@ static int mdss_dsi_register_driver(void)
 	return platform_driver_register(&mdss_dsi_driver);
 }
 
-static int __init mdss_dsi_driver_init(void)
-{
-	int ret;
 
-	ret = mdss_dsi_register_driver();
-	if (ret) {
-		pr_err("mdss_dsi_register_driver() failed!\n");
-		return ret;
-	}
-
-	return ret;
-}
-module_init(mdss_dsi_driver_init);
-
-
-static int mdss_dsi_ctrl_register_driver(void)
-{
-	return platform_driver_register(&mdss_dsi_ctrl_driver);
-}
 extern int mdss_dsi_panel_gamma(struct mdss_panel_data *pdata);
  int mdss_panel_set_gamma(struct mdss_panel_data *pdata, int   mode)
 {
@@ -4302,6 +4289,27 @@ err_out:
 	mutex_unlock(&ce_lock);
 	return ret;
 }
+
+static int __init mdss_dsi_driver_init(void)
+{
+	int ret;
+
+	ret = mdss_dsi_register_driver();
+	if (ret) {
+		pr_err("mdss_dsi_register_driver() failed!\n");
+		return ret;
+	}
+
+	return ret;
+}
+module_init(mdss_dsi_driver_init);
+
+
+static int mdss_dsi_ctrl_register_driver(void)
+{
+	return platform_driver_register(&mdss_dsi_ctrl_driver);
+}
+
 static int __init mdss_dsi_ctrl_driver_init(void)
 {
 	int ret;

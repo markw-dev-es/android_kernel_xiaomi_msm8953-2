@@ -336,6 +336,7 @@ struct device_node *of_batterydata_get_best_profile(
 	}
 
 	batt_id_kohm = ret.intval / 1000;
+
 	pr_err("WT batt_id_kohm=%d,batt_type=%s\n", batt_id_kohm, batt_type);
 	/* read battery id range percentage for best profile */
 	rc = of_property_read_u32(batterydata_container_node,

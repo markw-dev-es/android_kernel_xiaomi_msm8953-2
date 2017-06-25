@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -369,45 +369,6 @@ fail:
 	return -ENOMEM;
 }
 
-static uint32_t diag_translate_kernel_to_user_mask(uint32_t peripheral_mask)
-{
-	uint32_t ret = 0;
-
-	if (peripheral_mask & MD_PERIPHERAL_MASK(APPS_DATA))
-		ret |= DIAG_CON_APSS;
-	if (peripheral_mask & MD_PERIPHERAL_MASK(PERIPHERAL_MODEM))
-		ret |= DIAG_CON_MPSS;
-	if (peripheral_mask & MD_PERIPHERAL_MASK(PERIPHERAL_LPASS))
-		ret |= DIAG_CON_LPASS;
-	if (peripheral_mask & MD_PERIPHERAL_MASK(PERIPHERAL_WCNSS))
-		ret |= DIAG_CON_WCNSS;
-	if (peripheral_mask & MD_PERIPHERAL_MASK(PERIPHERAL_SENSORS))
-		ret |= DIAG_CON_SENSORS;
-
-	return ret;
-}
-
-void diag_clear_masks(struct diag_md_session_t *info)
-{
-	int ret;
-	char cmd_disable_log_mask[] = { 0x73, 0, 0, 0, 0, 0, 0, 0};
-	char cmd_disable_msg_mask[] = { 0x7D, 0x05, 0, 0, 0, 0, 0, 0};
-	char cmd_disable_event_mask[] = { 0x60, 0};
-
-	DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-	"diag: %s: masks clear request upon %s\n", __func__,
-	((info) ? "ODL exit" : "USB Disconnection"));
-
-	ret = diag_process_apps_masks(cmd_disable_log_mask,
-			sizeof(cmd_disable_log_mask), info);
-	ret = diag_process_apps_masks(cmd_disable_msg_mask,
-			sizeof(cmd_disable_msg_mask), info);
-	ret = diag_process_apps_masks(cmd_disable_event_mask,
-			sizeof(cmd_disable_event_mask), info);
-	DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-	"diag:%s: masks cleared successfully\n", __func__);
-}
-
 static void diag_close_logging_process(const int pid)
 {
 	int i;
@@ -419,12 +380,6 @@ static void diag_close_logging_process(const int pid)
 	if (!session_info)
 		return;
 
-	diag_clear_masks(session_info);
-
-	mutex_lock(&driver->diag_maskclear_mutex);
-	driver->mask_clear = 1;
-	mutex_unlock(&driver->diag_maskclear_mutex);
-
 	session_peripheral_mask = session_info->peripheral_mask;
 	diag_md_session_close(session_info);
 	for (i = 0; i < NUM_MD_SESSIONS; i++)
@@ -433,8 +388,7 @@ static void diag_close_logging_process(const int pid)
 
 	params.req_mode = USB_MODE;
 	params.mode_param = 0;
-	params.peripheral_mask =
-		diag_translate_kernel_to_user_mask(session_peripheral_mask);
+	params.peripheral_mask = 0;
 	mutex_lock(&driver->diagchar_mutex);
 	diag_switch_logging(&params);
 	mutex_unlock(&driver->diagchar_mutex);
@@ -463,11 +417,10 @@ static int diag_remove_client_entry(struct file *file)
 
 	diagpriv_data = file->private_data;
 
-	/*
-	 * clean up any DCI registrations, if this is a DCI client
-	 * This will specially help in case of ungraceful exit of any DCI client
-	 * This call will remove any pending registrations of such client
-	 */
+	/* clean up any DCI registrations, if this is a DCI client
+	* This will specially help in case of ungraceful exit of any DCI client
+	* This call will remove any pending registrations of such client
+	*/
 	mutex_lock(&driver->dci_mutex);
 	dci_entry = dci_lookup_client_entry_pid(current->tgid);
 	if (dci_entry)
@@ -500,14 +453,9 @@ static int diag_remove_client_entry(struct file *file)
 }
 static int diagchar_close(struct inode *inode, struct file *file)
 {
-	int ret;
 	DIAG_LOG(DIAG_DEBUG_USERSPACE, "diag: process exit %s\n",
 		current->comm);
-	ret = diag_remove_client_entry(file);
-	mutex_lock(&driver->diag_maskclear_mutex);
-	driver->mask_clear = 0;
-	mutex_unlock(&driver->diag_maskclear_mutex);
-	return ret;
+	return diag_remove_client_entry(file);
 }
 
 void diag_record_stats(int type, int flag)
@@ -953,11 +901,6 @@ static int diag_send_raw_data_remote(int proc, void *buf, int len,
 		hdlc_disabled = driver->hdlc_disabled;
 	if (hdlc_disabled) {
 		payload = *(uint16_t *)(buf + 2);
-		if (payload > DIAG_MAX_HDLC_BUF_SIZE) {
-			pr_err("diag: Dropping packet, payload size is %d\n",
-				payload);
-			return -EBADMSG;
-		}
 		driver->hdlc_encode_buf_len = payload;
 		/*
 		 * Adding 4 bytes for start (1 byte), version (1 byte) and
@@ -1205,10 +1148,19 @@ int diag_md_session_create(int mode, int peripheral_mask, int proc)
 	struct diag_md_session_t *new_session = NULL;
 
 	/*
-	 * If a session is running with a peripheral mask and a new session
-	 * request comes in with same peripheral mask value then return
-	 * invalid param
+	 * If there is any session running in Normal mode
+	 * we cannot start a new  session . If there is a
+	 * session running in Peripheral mode we cannot
+	 * start a new session in  NORMAL mode. If a session is
+	 * running with a peripheral mask and a new session
+	 * request comes in with same peripheral mask value
+	 * then return invalid param
 	 */
+	if (driver->md_session_mode == DIAG_MD_NORMAL)
+		return -EINVAL;
+	if (driver->md_session_mode == DIAG_MD_PERIPHERAL
+	    && mode == DIAG_MD_NORMAL)
+		return -EINVAL;
 	if (driver->md_session_mode == DIAG_MD_PERIPHERAL &&
 	    (driver->md_session_mask & peripheral_mask) != 0)
 		return -EINVAL;
@@ -1223,6 +1175,32 @@ int diag_md_session_create(int mode, int peripheral_mask, int proc)
 	new_session->peripheral_mask = 0;
 	new_session->pid = current->tgid;
 	new_session->task = current;
+
+	if (mode == DIAG_MD_NORMAL) {
+		new_session->log_mask = &log_mask;
+		new_session->event_mask = &event_mask;
+		new_session->msg_mask = &msg_mask;
+		for (i = 0; i < NUM_MD_SESSIONS; i++) {
+			if (driver->md_session_map[i] != NULL) {
+				DIAG_LOG(DIAG_DEBUG_USERSPACE,
+					 "another instance present for %d\n",
+					 i);
+				err = -EEXIST;
+				goto fail_normal;
+			}
+			new_session->peripheral_mask |= MD_PERIPHERAL_MASK(i);
+			driver->md_session_mask |= MD_PERIPHERAL_MASK(i);
+			driver->md_session_map[i] = new_session;
+		}
+		driver->md_session_mode = DIAG_MD_NORMAL;
+		setup_timer(&new_session->hdlc_reset_timer,
+			diag_md_hdlc_reset_timer_func,
+			new_session->pid);
+		DIAG_LOG(DIAG_DEBUG_USERSPACE,
+			 "created session in normal mode\n");
+		mutex_unlock(&driver->md_session_lock);
+		return 0;
+	}
 
 	new_session->log_mask = kzalloc(sizeof(struct diag_mask_info),
 					GFP_KERNEL);
@@ -1273,11 +1251,10 @@ int diag_md_session_create(int mode, int peripheral_mask, int proc)
 		new_session->peripheral_mask |= MD_PERIPHERAL_MASK(i);
 		driver->md_session_map[i] = new_session;
 		driver->md_session_mask |= MD_PERIPHERAL_MASK(i);
+		setup_timer(&new_session->hdlc_reset_timer,
+			diag_md_hdlc_reset_timer_func,
+			new_session->pid);
 	}
-	setup_timer(&new_session->hdlc_reset_timer,
-		diag_md_hdlc_reset_timer_func,
-		new_session->pid);
-
 	driver->md_session_mode = DIAG_MD_PERIPHERAL;
 	mutex_unlock(&driver->md_session_lock);
 	DIAG_LOG(DIAG_DEBUG_USERSPACE,
@@ -1294,6 +1271,7 @@ fail_peripheral:
 	diag_msg_mask_free(new_session->msg_mask);
 	kfree(new_session->msg_mask);
 	new_session->msg_mask = NULL;
+fail_normal:
 	kfree(new_session);
 	new_session = NULL;
 	mutex_unlock(&driver->md_session_lock);
@@ -1314,17 +1292,19 @@ static void diag_md_session_close(struct diag_md_session_t *session_info)
 			continue;
 		driver->md_session_map[i] = NULL;
 		driver->md_session_mask &= ~session_info->peripheral_mask;
+		if (driver->md_session_mode == DIAG_MD_NORMAL)
+			continue;
+		diag_log_mask_free(session_info->log_mask);
+		kfree(session_info->log_mask);
+		session_info->log_mask = NULL;
+		diag_msg_mask_free(session_info->msg_mask);
+		kfree(session_info->msg_mask);
+		session_info->msg_mask = NULL;
+		diag_event_mask_free(session_info->event_mask);
+		kfree(session_info->event_mask);
+		session_info->event_mask = NULL;
+		del_timer(&session_info->hdlc_reset_timer);
 	}
-	diag_log_mask_free(session_info->log_mask);
-	kfree(session_info->log_mask);
-	session_info->log_mask = NULL;
-	diag_msg_mask_free(session_info->msg_mask);
-	kfree(session_info->msg_mask);
-	session_info->msg_mask = NULL;
-	diag_event_mask_free(session_info->event_mask);
-	kfree(session_info->event_mask);
-	session_info->event_mask = NULL;
-	del_timer(&session_info->hdlc_reset_timer);
 
 	for (i = 0; i < NUM_MD_SESSIONS && !found; i++) {
 		if (driver->md_session_map[i] != NULL)
@@ -1357,157 +1337,113 @@ struct diag_md_session_t *diag_md_session_get_peripheral(uint8_t peripheral)
 	return driver->md_session_map[peripheral];
 }
 
-static int diag_md_peripheral_switch(struct diag_md_session_t *session_info,
-				int peripheral_mask, int req_mode) {
-	int i, bit = 0;
-
-	if (!session_info)
-		return -EINVAL;
-	if (req_mode != DIAG_USB_MODE || req_mode != DIAG_MEMORY_DEVICE_MODE)
-		return -EINVAL;
-
-	/*
-	 * check that md_session_map for i == session_info,
-	 * if not then race condition occurred and bail
-	 */
-	mutex_lock(&driver->md_session_lock);
-	for (i = 0; i < NUM_MD_SESSIONS; i++) {
-		bit = MD_PERIPHERAL_MASK(i) & peripheral_mask;
-		if (!bit)
-			continue;
-		if (req_mode == DIAG_USB_MODE) {
-			if (driver->md_session_map[i] != session_info) {
-				mutex_unlock(&driver->md_session_lock);
-				return -EINVAL;
-			}
-			driver->md_session_map[i] = NULL;
-			driver->md_session_mask &= ~bit;
-			session_info->peripheral_mask &= ~bit;
-
-		} else {
-			if (driver->md_session_map[i] != NULL) {
-				mutex_unlock(&driver->md_session_lock);
-				return -EINVAL;
-			}
-			driver->md_session_map[i] = session_info;
-			driver->md_session_mask |= bit;
-			session_info->peripheral_mask |= bit;
-
-		}
-	}
-
-	driver->md_session_mode = DIAG_MD_PERIPHERAL;
-	mutex_unlock(&driver->md_session_lock);
-	DIAG_LOG(DIAG_DEBUG_USERSPACE, "Changed Peripherals:0x%x to mode:%d\n",
-		peripheral_mask, req_mode);
-}
-
 static int diag_md_session_check(int curr_mode, int req_mode,
 				 const struct diag_logging_mode_param_t *param,
 				 uint8_t *change_mode)
 {
-	int i, bit = 0, err = 0;
-	int change_mask = 0;
+	int err = 0;
 	struct diag_md_session_t *session_info = NULL;
 
 	if (!param || !change_mode)
 		return -EIO;
 
-	*change_mode = 0;
+	*change_mode = 1;
 
 	switch (curr_mode) {
 	case DIAG_USB_MODE:
 	case DIAG_MEMORY_DEVICE_MODE:
-	case DIAG_MULTI_MODE:
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	if (req_mode != DIAG_USB_MODE && req_mode != DIAG_MEMORY_DEVICE_MODE)
+	switch (req_mode) {
+	case DIAG_USB_MODE:
+	case DIAG_MEMORY_DEVICE_MODE:
+		break;
+	default:
 		return -EINVAL;
+	}
 
-	if (req_mode == DIAG_USB_MODE) {
-		if (curr_mode == DIAG_USB_MODE)
-			return 0;
-		if (driver->md_session_mode == DIAG_MD_NONE
-		    && driver->md_session_mask == 0 && driver->logging_mask) {
-			*change_mode = 1;
+	if (curr_mode == DIAG_USB_MODE) {
+		if (req_mode == DIAG_USB_MODE) {
+			/*
+			 * This case tries to change from USB mode to USB mode.
+			 * There is no change required. Return success.
+			 */
+			*change_mode = 0;
 			return 0;
 		}
 
 		/*
-		 * curr_mode is either DIAG_MULTI_MODE or DIAG_MD_MODE
-		 * Check if requested peripherals are already in usb mode
+		 * If there is no other mdlog process, return success.
+		 * Check if the peripheral interested in is active.
 		 */
-		for (i = 0; i < NUM_MD_SESSIONS; i++) {
-			bit = MD_PERIPHERAL_MASK(i) & param->peripheral_mask;
-			if (!bit)
-				continue;
-			if (bit & driver->logging_mask)
-				change_mask |= bit;
+		if (param->mode_param == DIAG_MD_NORMAL) {
+			err = diag_md_session_create(DIAG_MD_NORMAL, 0,
+						     DIAG_LOCAL_PROC);
+			return err;
+		} else if (param->mode_param == DIAG_MD_PERIPHERAL &&
+			   (!(driver->md_session_mask &
+			      param->peripheral_mask))) {
+			err = diag_md_session_create(DIAG_MD_PERIPHERAL,
+						     param->peripheral_mask,
+						     DIAG_LOCAL_PROC);
+			return err;
 		}
-		if (!change_mask)
-			return 0;
-
-		/*
-		 * Change is needed. Check if this md_session has set all the
-		 * requested peripherals. If another md session set a requested
-		 * peripheral then we cannot switch that peripheral to USB.
-		 * If this session owns all the requested peripherals, then
-		 * call function to switch the modes/masks for the md_session
-		 */
-		session_info = diag_md_session_get_pid(current->tgid);
-		if (!session_info) {
-			*change_mode = 1;
-			return 0;
-		}
-		if ((change_mask & session_info->peripheral_mask)
-							!= change_mask) {
-			DIAG_LOG(DIAG_DEBUG_USERSPACE,
-			    "Another MD Session owns a requested peripheral\n");
-			return -EINVAL;
-		}
-		*change_mode = 1;
-
-		/* If all peripherals are being set to USB Mode, call close */
-		if (~change_mask & session_info->peripheral_mask) {
-			err = diag_md_peripheral_switch(session_info,
-					change_mask, DIAG_USB_MODE);
-		} else
-			diag_md_session_close(session_info);
-
-		return err;
-
-	} else if (req_mode == DIAG_MEMORY_DEVICE_MODE) {
-		/*
-		 * Get bit mask that represents what peripherals already have
-		 * been set. Check that requested peripherals already set are
-		 * owned by this md session
-		 */
-		change_mask = driver->md_session_mask & param->peripheral_mask;
-		session_info = diag_md_session_get_pid(current->tgid);
-
-		if (session_info) {
-			if ((session_info->peripheral_mask & change_mask)
-							!= change_mask) {
+		DIAG_LOG(DIAG_DEBUG_USERSPACE,
+			 "an instance of mdlog is active\n");
+		*change_mode = 0;
+		return -EINVAL;
+	} else if (curr_mode == DIAG_MEMORY_DEVICE_MODE) {
+		if (req_mode == DIAG_USB_MODE) {
+			if (driver->md_session_mask != 0 &&
+				driver->md_session_mode == DIAG_MD_PERIPHERAL) {
+				/*
+				 * An instance of mdlog is still running, Return
+				 * error.
+				 */
 				DIAG_LOG(DIAG_DEBUG_USERSPACE,
-				    "Another MD Session owns a requested peripheral\n");
+					 "another instance running\n");
+				*change_mode = 0;
 				return -EINVAL;
 			}
-			err = diag_md_peripheral_switch(session_info,
-					change_mask, DIAG_USB_MODE);
-		} else {
-			if (change_mask) {
+			session_info = diag_md_session_get_pid(current->tgid);
+			diag_md_session_close(session_info);
+			return 0;
+		}
+
+		if (param->mode_param == DIAG_MD_NORMAL) {
+			/*
+			 * The new client is asking for MD_NORMAL. We're
+			 * already in memory device mode - this must be
+			 * set by another active process. Return error
+			 * for this new client.
+			 */
+			DIAG_LOG(DIAG_DEBUG_USERSPACE,
+				 "unable to switch logging mode\n");
+			*change_mode = 0;
+			return -EINVAL;
+		} else if (param->mode_param == DIAG_MD_PERIPHERAL) {
+			if (driver->md_session_mask & param->peripheral_mask) {
+				/*
+				 * The new client is asking for a
+				 * specific peripheral. This case checks
+				 * if a client is exercising this
+				 * peripheral already. Return error
+				 * if the peripheral is already in use.
+				 */
 				DIAG_LOG(DIAG_DEBUG_USERSPACE,
-				    "Another MD Session owns a requested peripheral\n");
+					 "another instance running\n");
+				*change_mode = 0;
 				return -EINVAL;
 			}
 			err = diag_md_session_create(DIAG_MD_PERIPHERAL,
-				param->peripheral_mask, DIAG_LOCAL_PROC);
+						     param->peripheral_mask,
+						     DIAG_LOCAL_PROC);
+			*change_mode = 0;
+			return err;
 		}
-		*change_mode = 1;
-		return err;
 	}
 	return -EINVAL;
 }
@@ -1541,14 +1477,17 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 	if (!param)
 		return -EINVAL;
 
-	if (!param->peripheral_mask) {
+	if (param->mode_param == DIAG_MD_PERIPHERAL &&
+	    param->peripheral_mask == 0) {
 		DIAG_LOG(DIAG_DEBUG_USERSPACE,
-			"asking for mode switch with no peripheral mask set\n");
+			 "asking for peripehral mode with no mask being set\n");
 		return -EINVAL;
 	}
 
-	peripheral_mask = diag_translate_mask(param->peripheral_mask);
-	param->peripheral_mask = peripheral_mask;
+	if (param->mode_param == DIAG_MD_PERIPHERAL) {
+		peripheral_mask = diag_translate_mask(param->peripheral_mask);
+		param->peripheral_mask = peripheral_mask;
+	}
 
 	switch (param->req_mode) {
 	case CALLBACK_MODE:
@@ -1568,8 +1507,8 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 
 	curr_mode = driver->logging_mode;
 	DIAG_LOG(DIAG_DEBUG_USERSPACE,
-		"request to switch logging from %d mask:%0x to %d mask:%0x\n",
-		curr_mode, driver->md_session_mask, new_mode, peripheral_mask);
+		 "request to switch logging from: %d to %d\n",
+		 curr_mode, new_mode);
 
 	err = diag_md_session_check(curr_mode, new_mode, param, &do_switch);
 	if (err) {
@@ -1586,7 +1525,7 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 	}
 
 	diag_ws_reset(DIAG_WS_MUX);
-	err = diag_mux_switch_logging(&new_mode, &peripheral_mask);
+	err = diag_mux_switch_logging(new_mode);
 	if (err) {
 		pr_err("diag: In %s, unable to switch mode from %d to %d, err: %d\n",
 		       __func__, curr_mode, new_mode, err);
@@ -1594,11 +1533,7 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 		goto fail;
 	}
 	driver->logging_mode = new_mode;
-	driver->logging_mask = peripheral_mask;
-	DIAG_LOG(DIAG_DEBUG_USERSPACE,
-		"Switch logging to %d mask:%0x\n", new_mode, peripheral_mask);
 
-	/* Update to take peripheral_mask */
 	if (new_mode != DIAG_MEMORY_DEVICE_MODE) {
 		diag_update_real_time_vote(DIAG_PROC_MEMORY_DEVICE,
 					   MODE_REALTIME, ALL_PROC);
@@ -1904,8 +1839,10 @@ static int diag_ioctl_register_callback(unsigned long ioarg)
 		return -EINVAL;
 	}
 
-	if (driver->md_session_mode == DIAG_MD_PERIPHERAL)
+	if (driver->md_session_mode == DIAG_MD_NORMAL ||
+	    driver->md_session_mode == DIAG_MD_PERIPHERAL) {
 		return -EIO;
+	}
 
 	return err;
 }
@@ -2800,8 +2737,7 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 	mutex_lock(&driver->diagchar_mutex);
 
 	if ((driver->data_ready[index] & USER_SPACE_DATA_TYPE) &&
-	    (driver->logging_mode == DIAG_MEMORY_DEVICE_MODE ||
-	     driver->logging_mode == DIAG_MULTI_MODE)) {
+	    (driver->logging_mode == DIAG_MEMORY_DEVICE_MODE)) {
 		pr_debug("diag: process woken up\n");
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & USER_SPACE_DATA_TYPE;
@@ -3349,7 +3285,7 @@ static int diagchar_cleanup(void)
 static int __init diagchar_init(void)
 {
 	dev_t dev;
-	int error, ret, i;
+	int error, ret;
 
 	pr_debug("diagfwd initializing ..\n");
 	ret = 0;
@@ -3391,12 +3327,10 @@ static int __init diagchar_init(void)
 	non_hdlc_data.len = 0;
 	mutex_init(&driver->hdlc_disable_mutex);
 	mutex_init(&driver->diagchar_mutex);
-	mutex_init(&driver->diag_maskclear_mutex);
 	mutex_init(&driver->diag_file_mutex);
 	mutex_init(&driver->delayed_rsp_mutex);
 	mutex_init(&apps_data_mutex);
-	for (i = 0; i < NUM_PERIPHERALS; i++)
-		mutex_init(&driver->diagfwd_channel_mutex[i]);
+	mutex_init(&driver->diagfwd_channel_mutex);
 	init_waitqueue_head(&driver->wait_q);
 	INIT_WORK(&(driver->diag_drain_work), diag_drain_work_fn);
 	INIT_WORK(&(driver->update_user_clients),

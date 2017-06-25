@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -159,6 +159,7 @@ static bool ocr_nodes_called;
 static bool ocr_probed;
 static bool ocr_reg_init_defer;
 static bool hotplug_enabled;
+static bool interrupt_mode_enable;
 static bool msm_thermal_probed;
 static bool gfx_crit_phase_ctrl_enabled;
 static bool gfx_warm_phase_ctrl_enabled;
@@ -2360,6 +2361,7 @@ fail:
 
 static int create_sensor_id_map(struct device *dev)
 {
+	int i = 0;
 	int ret = 0;
 
 	tsens_id_map = devm_kzalloc(dev,
@@ -2370,10 +2372,19 @@ static int create_sensor_id_map(struct device *dev)
 		return -ENOMEM;
 	}
 
-	ret = tsens_get_hw_id_mapping(max_tsens_num, tsens_id_map);
-	if (ret) {
-		pr_err("Failed to get tsens id's:%d\n", ret);
-		goto fail;
+	for (i = 0; i < max_tsens_num; i++) {
+		ret = tsens_get_hw_id_mapping(i, &tsens_id_map[i]);
+		/* If return -ENXIO, hw_id is default in sequence */
+		if (ret) {
+			if (ret == -ENXIO) {
+				tsens_id_map[i] = i;
+				ret = 0;
+			} else {
+				pr_err("Failed to get hw id for id:%d.err:%d\n",
+						i, ret);
+				goto fail;
+			}
+		}
 	}
 
 	return ret;
@@ -2684,12 +2695,8 @@ static void vdd_mx_notify(struct therm_threshold *trig_thresh)
 			pr_err("Failed to remove vdd mx restriction\n");
 	}
 	mutex_unlock(&vdd_mx_mutex);
-
-	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
-		sensor_mgr_set_threshold(trig_thresh->sensor_id,
+	sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
-		trig_thresh->cur_state = trig_thresh->trip_triggered;
-	}
 }
 
 static void msm_thermal_bite(int zone_id, long temp)
@@ -2812,7 +2819,7 @@ static void __ref do_core_control(long temp)
 				cpu_dev = get_cpu_device(i);
 				trace_thermal_pre_core_offline(i);
 				ret = device_offline(cpu_dev);
-				if (ret < 0)
+				if (ret)
 					pr_err("Error %d offline core %d\n",
 					       ret, i);
 				trace_thermal_post_core_offline(i,
@@ -2885,8 +2892,7 @@ static int __ref update_offline_cores(int val)
 			cpu_dev = get_cpu_device(cpu);
 			trace_thermal_pre_core_offline(cpu);
 			ret = device_offline(cpu_dev);
-			if (ret < 0) {
-				cpus_offlined &= ~BIT(cpu);
+			if (ret) {
 				pr_err_ratelimited(
 					"Unable to offline CPU%d. err:%d\n",
 					cpu, ret);
@@ -2956,14 +2962,6 @@ static __ref int do_hotplug(void *data)
 			&hotplug_notify_complete) != 0)
 			;
 		reinit_completion(&hotplug_notify_complete);
-
-		/*
-		 * Suspend framework will have disabled the
-		 * hotplug functionality. So wait till the suspend exits
-		 * and then re-evaluate.
-		 */
-		if (in_suspend)
-			continue;
 		mask = 0;
 
 		mutex_lock(&core_control_mutex);
@@ -3514,7 +3512,7 @@ static int hotplug_init_cpu_offlined(void)
 	long temp = 0;
 	uint32_t cpu = 0;
 
-	if (!hotplug_enabled || !hotplug_task)
+	if (!hotplug_enabled)
 		return 0;
 
 	mutex_lock(&core_control_mutex);
@@ -3531,7 +3529,8 @@ static int hotplug_init_cpu_offlined(void)
 
 		if (temp >= msm_thermal_info.hotplug_temp_degC)
 			cpus[cpu].offline = 1;
-		else
+		else if (temp <= (msm_thermal_info.hotplug_temp_degC -
+			msm_thermal_info.hotplug_temp_hysteresis_degC))
 			cpus[cpu].offline = 0;
 	}
 	mutex_unlock(&core_control_mutex);
@@ -3768,8 +3767,6 @@ init_freq_thread:
 		pr_err("Failed to create frequency mitigation thread. err:%ld\n",
 				PTR_ERR(freq_mitigation_task));
 		return;
-	} else {
-		complete(&freq_mitigation_complete);
 	}
 }
 
@@ -4068,11 +4065,8 @@ static void cx_phase_ctrl_notify(struct therm_threshold *trig_thresh)
 cx_phase_unlock_exit:
 	mutex_unlock(&cx_mutex);
 cx_phase_ctrl_exit:
-	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
-		sensor_mgr_set_threshold(trig_thresh->sensor_id,
+	sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
-		trig_thresh->cur_state = trig_thresh->trip_triggered;
-	}
 	return;
 }
 
@@ -4200,11 +4194,8 @@ static void vdd_restriction_notify(struct therm_threshold *trig_thresh)
 unlock_and_exit:
 	mutex_unlock(&vdd_rstr_mutex);
 set_and_exit:
-	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
-		sensor_mgr_set_threshold(trig_thresh->sensor_id,
+	sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
-		trig_thresh->cur_state = trig_thresh->trip_triggered;
-	}
 	return;
 }
 
@@ -4252,11 +4243,8 @@ static void ocr_notify(struct therm_threshold *trig_thresh)
 unlock_and_exit:
 	mutex_unlock(&ocr_mutex);
 set_and_exit:
-	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
-		sensor_mgr_set_threshold(trig_thresh->sensor_id,
-				trig_thresh->threshold);
-		trig_thresh->cur_state = trig_thresh->trip_triggered;
-	}
+	sensor_mgr_set_threshold(trig_thresh->sensor_id,
+					trig_thresh->threshold);
 	return;
 }
 
@@ -4491,7 +4479,6 @@ int sensor_mgr_init_threshold(struct threshold_info *thresh_inp,
 			thresh_ptr[i].notify = callback;
 			thresh_ptr[i].trip_triggered = -1;
 			thresh_ptr[i].parent = thresh_inp;
-			thresh_ptr[i].cur_state = -1;
 			thresh_ptr[i].threshold[0].temp =
 				high_temp * tsens_scaling_factor;
 			thresh_ptr[i].threshold[0].trip =
@@ -4512,7 +4499,6 @@ int sensor_mgr_init_threshold(struct threshold_info *thresh_inp,
 		thresh_ptr->notify = callback;
 		thresh_ptr->trip_triggered = -1;
 		thresh_ptr->parent = thresh_inp;
-		thresh_ptr->cur_state = -1;
 		thresh_ptr->threshold[0].temp = high_temp * tsens_scaling_factor;
 		thresh_ptr->threshold[0].trip =
 			THERMAL_TRIP_CONFIGURABLE_HI;
@@ -4689,9 +4675,10 @@ static void __ref disable_msm_thermal(void)
 
 static void interrupt_mode_init(void)
 {
-	if (!msm_thermal_probed)
+	if (!msm_thermal_probed) {
+		interrupt_mode_enable = true;
 		return;
-
+	}
 	if (polling_enabled) {
 		polling_enabled = 0;
 		create_sensor_zone_id_map();
@@ -5791,13 +5778,6 @@ static int probe_vdd_mx(struct device_node *node,
 	if (ret)
 		goto read_node_done;
 
-	/*
-	 * Monitor only this sensor if defined, otherwise monitor all tsens
-	 */
-	key = "qcom,mx-restriction-sensor_id";
-	if (of_property_read_u32(node, key, &data->vdd_mx_sensor_id))
-		data->vdd_mx_sensor_id = MONITOR_ALL_TSENS;
-
 	vdd_mx = devm_regulator_get(&pdev->dev, "vdd-mx");
 	if (IS_ERR_OR_NULL(vdd_mx)) {
 		ret = PTR_ERR(vdd_mx);
@@ -5824,7 +5804,7 @@ static int probe_vdd_mx(struct device_node *node,
 	}
 
 	ret = sensor_mgr_init_threshold(&thresh[MSM_VDD_MX_RESTRICTION],
-			data->vdd_mx_sensor_id,
+			MONITOR_ALL_TSENS,
 			data->vdd_mx_temp_degC + data->vdd_mx_temp_hyst_degC,
 			data->vdd_mx_temp_degC, vdd_mx_notify);
 
@@ -6763,9 +6743,6 @@ static void thermal_mx_config_read(struct seq_file *m, void *data)
 		if (vdd_cx)
 			seq_printf(m, "cx retention value:%d\n",
 				msm_thermal_info.vdd_cx_min);
-		if (msm_thermal_info.vdd_mx_sensor_id != MONITOR_ALL_TSENS)
-			seq_printf(m, "tsens sensor:tsens_tz_sensor%d\n",
-				msm_thermal_info.vdd_mx_sensor_id);
 	}
 }
 
@@ -7111,6 +7088,11 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 	ret = msm_thermal_init(&data);
 	msm_thermal_probed = true;
 
+	if (interrupt_mode_enable) {
+		interrupt_mode_init();
+		interrupt_mode_enable = false;
+	}
+
 	return ret;
 fail:
 	if (ret)
@@ -7246,6 +7228,7 @@ int __init msm_thermal_late_init(void)
 		}
 	}
 	msm_thermal_add_mx_nodes();
+	interrupt_mode_init();
 	create_cpu_topology_sysfs();
 	create_thermal_debugfs();
 	msm_thermal_add_bucket_info_nodes();

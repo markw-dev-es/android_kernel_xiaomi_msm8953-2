@@ -219,7 +219,7 @@ static struct platform_driver vkeys_driver = {
 	.remove = vkeys_remove,
 	.driver = {
 		.owner = THIS_MODULE,
-		.name = "gen_vkey",
+		.name = "gen-vkey",
 		.of_match_table = vkey_match_table,
 	},
 };

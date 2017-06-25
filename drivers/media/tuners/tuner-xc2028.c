@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2007 Michel Ludwig (michel.ludwig@gmail.com)
  *       - frontend interface
+ * Copyright (C) 2017 XiaoMi, Inc.
  *
  * This code is placed under the terms of the GNU General Public License v2
  */

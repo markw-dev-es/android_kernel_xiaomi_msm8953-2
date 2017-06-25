@@ -4,6 +4,7 @@
  * Copyright 2003-2004 Red Hat Inc., Durham, North Carolina.
  * Copyright 2005 Hewlett-Packard Development Company, L.P.
  * Copyright (C) 2005, 2006 IBM Corporation
+ * Copyright (C) 2017 XiaoMi, Inc.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify

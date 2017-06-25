@@ -1,7 +1,7 @@
 /*
  * u_smd.c - utilities for USB gadget serial over smd
  *
- * Copyright (c) 2011, 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This code also borrows from drivers/usb/gadget/u_serial.c, which is
  * Copyright (C) 2000 - 2003 Al Borchers (alborchers@steinerpoint.com)
@@ -548,9 +548,6 @@ static void gsmd_stop_io(struct gsmd_port *port)
 		gsmd_free_requests(in, &port->write_pool);
 		port->n_read = 0;
 		port->cbits_to_laptop = 0;
-	} else {
-		spin_unlock(&port->port_lock);
-		return;
 	}
 
 	if (port->port_usb->send_modem_ctrl_bits)

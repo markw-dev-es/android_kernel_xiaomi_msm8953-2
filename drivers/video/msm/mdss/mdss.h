@@ -110,11 +110,12 @@ struct mdss_prefill_data {
 	u32 post_scaler_pixels;
 	u32 pp_pixels;
 	u32 fbc_lines;
-	u32 ts_threshold;
-	u32 ts_end;
-	u32 ts_overhead;
-	struct mult_factor ts_rate;
 	struct simplified_prefill_factors prefill_factors;
+};
+
+struct mdss_mdp_ppb {
+	u32 ctl_off;
+	u32 cfg_off;
 };
 
 struct mdss_mdp_dsc {
@@ -160,8 +161,6 @@ enum mdss_hw_quirk {
 	MDSS_QUIRK_DMA_BI_DIR,
 	MDSS_QUIRK_FMT_PACK_PATTERN,
 	MDSS_QUIRK_NEED_SECURE_MAP,
-	MDSS_QUIRK_SRC_SPLIT_ALWAYS,
-	MDSS_QUIRK_HDR_SUPPORT_ENABLED,
 	MDSS_QUIRK_MAX,
 };
 
@@ -184,19 +183,7 @@ enum mdss_qos_settings {
 	MDSS_QOS_PER_PIPE_LUT,
 	MDSS_QOS_SIMPLIFIED_PREFILL,
 	MDSS_QOS_VBLANK_PANIC_CTRL,
-	MDSS_QOS_TS_PREFILL,
-	MDSS_QOS_REMAPPER,
-	MDSS_QOS_IB_NOCR,
 	MDSS_QOS_MAX,
-};
-
-enum mdss_mdp_pipe_type {
-	MDSS_MDP_PIPE_TYPE_INVALID = -1,
-	MDSS_MDP_PIPE_TYPE_VIG = 0,
-	MDSS_MDP_PIPE_TYPE_RGB,
-	MDSS_MDP_PIPE_TYPE_DMA,
-	MDSS_MDP_PIPE_TYPE_CURSOR,
-	MDSS_MDP_PIPE_TYPE_MAX,
 };
 
 struct reg_bus_client {
@@ -213,7 +200,6 @@ struct mdss_smmu_client {
 	struct reg_bus_client *reg_bus_clt;
 	bool domain_attached;
 	bool handoff_pending;
-	char __iomem *mmu_base;
 };
 
 struct mdss_mdp_qseed3_lut_tbl {
@@ -333,9 +319,8 @@ struct mdss_data_type {
 	u32 default_ot_wr_limit;
 
 	struct irq_domain *irq_domain;
-	u32 *mdp_irq_mask;
+	u32 mdp_irq_mask;
 	u32 mdp_hist_irq_mask;
-	u32 mdp_intf_irq_mask;
 
 	int suspend_fs_ena;
 	u8 clk_ena;
@@ -407,7 +392,6 @@ struct mdss_data_type {
 
 	struct mdss_hw_settings *hw_settings;
 
-	int rects_per_sspp[MDSS_MDP_PIPE_TYPE_MAX];
 	struct mdss_mdp_pipe *vig_pipes;
 	struct mdss_mdp_pipe *rgb_pipes;
 	struct mdss_mdp_pipe *dma_pipes;
@@ -419,10 +403,8 @@ struct mdss_data_type {
 	u8  ncursor_pipes;
 	u32 max_cursor_size;
 
-	u32 nppb_ctl;
-	u32 *ppb_ctl;
-	u32 nppb_cfg;
-	u32 *ppb_cfg;
+	u32 nppb;
+	struct mdss_mdp_ppb *ppb;
 	char __iomem *slave_pingpong_base;
 
 	struct mdss_mdp_mixer *mixer_intf;

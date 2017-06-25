@@ -346,8 +346,7 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		KGSL_CONTEXT_PWR_CONSTRAINT |
 		KGSL_CONTEXT_IFH_NOP |
 		KGSL_CONTEXT_SECURE |
-		KGSL_CONTEXT_PREEMPT_STYLE_MASK |
-		KGSL_CONTEXT_NO_SNAPSHOT);
+		KGSL_CONTEXT_PREEMPT_STYLE_MASK);
 
 	/* Check for errors before trying to initialize */
 
@@ -467,6 +466,20 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 	list_del_init(&drawctxt->active_node);
 	spin_unlock(&adreno_dev->active_list_lock);
 
+	/* deactivate context */
+	mutex_lock(&device->mutex);
+	if (rb->drawctxt_active == drawctxt) {
+		if (adreno_dev->cur_rb == rb) {
+			if (!kgsl_active_count_get(device)) {
+				adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
+				kgsl_active_count_put(device);
+			} else
+				BUG();
+		} else
+			adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
+	}
+	mutex_unlock(&device->mutex);
+
 	spin_lock(&drawctxt->lock);
 	count = drawctxt_detach_cmdbatches(drawctxt, list);
 	spin_unlock(&drawctxt->lock);
@@ -535,21 +548,12 @@ void adreno_drawctxt_destroy(struct kgsl_context *context)
 	kfree(drawctxt);
 }
 
-static void _drawctxt_switch_wait_callback(struct kgsl_device *device,
-		struct kgsl_event_group *group,
-		void *priv, int result)
-{
-	struct adreno_context *drawctxt = (struct adreno_context *) priv;
-
-	kgsl_context_put(&drawctxt->base);
-}
-
 /**
  * adreno_drawctxt_switch - switch the current draw context in a given RB
  * @adreno_dev - The 3D device that owns the context
  * @rb: The ringubffer pointer on which the current context is being changed
  * @drawctxt - the 3D context to switch to
- * @flags: Control flags for the switch
+ * @flags - Flags to accompany the switch (from user space)
  *
  * Switch the current draw context in given RB
  */
@@ -579,7 +583,8 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	if (drawctxt != NULL && kgsl_context_detached(&drawctxt->base))
 		return -ENOENT;
 
-	trace_adreno_drawctxt_switch(rb, drawctxt);
+	trace_adreno_drawctxt_switch(rb,
+		drawctxt, flags);
 
 	/* Get a refcount to the new instance */
 	if (drawctxt) {
@@ -591,18 +596,16 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 		 /* No context - set the default pagetable and thats it. */
 		new_pt = device->mmu.defaultpagetable;
 	}
-	ret = adreno_ringbuffer_set_pt_ctx(rb, new_pt, drawctxt, flags);
-	if (ret)
+	ret = adreno_ringbuffer_set_pt_ctx(rb, new_pt, drawctxt);
+	if (ret) {
+		KGSL_DRV_ERR(device,
+			"Failed to set pagetable on rb %d\n", rb->id);
 		return ret;
-
-	if (rb->drawctxt_active) {
-		/* Wait for the timestamp to expire */
-		if (kgsl_add_event(device, &rb->events, rb->timestamp,
-			_drawctxt_switch_wait_callback,
-			rb->drawctxt_active)) {
-			kgsl_context_put(&rb->drawctxt_active->base);
-		}
 	}
+
+	/* Put the old instance of the active drawctxt */
+	if (rb->drawctxt_active)
+		kgsl_context_put(&rb->drawctxt_active->base);
 
 	rb->drawctxt_active = drawctxt;
 	return 0;

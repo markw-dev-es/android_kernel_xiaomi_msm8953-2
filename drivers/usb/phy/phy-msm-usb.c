@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2017, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -131,6 +131,8 @@ static u32 bus_freqs[USB_NOC_NUM_VOTE][USB_NUM_BUS_CLOCKS]  /*bimc,snoc,pcnoc*/;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
 						"pcnoc_clk"};
 static bool bus_clk_rate_set;
+
+
 static int oem_is_kpoc;
 static int __init oem_kpoc_setup(char *str)
 {
@@ -142,6 +144,8 @@ static int __init oem_kpoc_setup(char *str)
 	return 1;
 }
 __setup("androidboot.mode=", oem_kpoc_setup);
+
+
 static void dbg_inc(unsigned *idx)
 {
 	*idx = (*idx + 1) & (DEBUG_MAX_MSG-1);
@@ -1816,11 +1820,9 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 
 	/*
 	 * This condition will be true when usb cable is disconnected
-	 * during bootup before enumeration. Check charger type also
-	 * to avoid clearing online flag in case of valid charger.
+	 * during bootup before charger detection mechanism starts.
 	 */
-	if (motg->online && motg->cur_power == 0 && mA == 0 &&
-			(motg->chg_type == USB_INVALID_CHARGER))
+	if (motg->online && motg->cur_power == 0 && mA == 0)
 		msm_otg_set_online_status(motg);
 
 	if (motg->cur_power == mA)
@@ -2409,10 +2411,10 @@ static void msm_chg_enable_dcd(struct msm_otg *motg)
 		 * may be incorrectly interpreted. Also
 		 * BC1.2 compliance testers expect Rdm_down
 		 * to enabled during DCD. Enable Rdm_down
-		 * explicitly before enabling the DCD.
+		 * explicitly after enabling the DCD.
 		 */
-		ulpi_write(phy, 0x04, 0x0B);
 		ulpi_write(phy, 0x10, 0x85);
+		ulpi_write(phy, 0x04, 0x0B);
 		break;
 	default:
 		break;
@@ -2841,6 +2843,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 							IDEV_CHG_MAX);
 					/* fall through */
 				case USB_SDP_CHARGER:
+
 					if (oem_is_kpoc) {
 						motg->chg_type = USB_DCP_CHARGER;
 						msm_otg_notify_charger(motg, 500);
@@ -2850,8 +2853,14 @@ static void msm_otg_sm_work(struct work_struct *w)
 						pm_runtime_suspend(otg->phy->dev);
 						break;
 					}
+
+
+
+
 						msm_otg_notify_charger(motg,
 							IDEV_CHG_MIN);
+
+
 					pm_runtime_get_sync(otg->phy->dev);
 					msm_otg_start_peripheral(otg, 1);
 					otg->phy->state =
@@ -3771,11 +3780,10 @@ set_msm_otg_perf_mode(struct device *dev, struct device_attribute *attr,
 		ret = clk_set_rate(motg->core_clk, clk_rate);
 		if (ret)
 			pr_err("sys_clk set_rate fail:%d %ld\n", ret, clk_rate);
-		msm_otg_dbg_log_event(&motg->phy, "OTG PERF SET",
-							clk_rate, ret);
 	} else {
 		pr_err("usb sys_clk rate is undefined\n");
 	}
+	msm_otg_dbg_log_event(&motg->phy, "OTG PERF SET", clk_rate, ret);
 
 	return count;
 }
@@ -4802,7 +4810,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 			 * for device mode In this case HUB should be gone
 			 * only once out of reset at the boot time and after
 			 * that always stay on*/
-			if (gpio_is_valid(motg->pdata->hub_reset_gpio)) {
+			if (gpio_is_valid(motg->pdata->hub_reset_gpio))
 				ret = devm_gpio_request(&pdev->dev,
 						motg->pdata->hub_reset_gpio,
 						"qcom,hub-reset-gpio");
@@ -4812,7 +4820,6 @@ static int msm_otg_probe(struct platform_device *pdev)
 				}
 				gpio_direction_output(
 					motg->pdata->hub_reset_gpio, 1);
-			}
 
 			if (gpio_is_valid(motg->pdata->switch_sel_gpio)) {
 				ret = devm_gpio_request(&pdev->dev,

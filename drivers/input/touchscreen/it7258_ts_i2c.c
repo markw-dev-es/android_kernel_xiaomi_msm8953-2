@@ -117,7 +117,6 @@
 #define PD_FLAGS_DATA_TYPE_BITS		0xF0
 /* other types (like chip-detected gestures) exist but we do not care */
 #define PD_FLAGS_DATA_TYPE_TOUCH	0x00
-#define PD_FLAGS_IDLE_TO_ACTIVE		0x10
 /* a bit for each finger data that is valid (from lsb to msb) */
 #define PD_FLAGS_HAVE_FINGERS		0x07
 #define PD_PALM_FLAG_BIT		0x01
@@ -138,15 +137,15 @@
 #define PINCTRL_STATE_RELEASE	"pmx_ts_release"
 
 struct finger_data {
-	u8 xLo;
-	u8 hi;
-	u8 yLo;
-	u8 pressure;
+	uint8_t xLo;
+	uint8_t hi;
+	uint8_t yLo;
+	uint8_t pressure;
 }  __packed;
 
 struct point_data {
-	u8 flags;
-	u8 gesture_id;
+	uint8_t flags;
+	uint8_t palm;
 	struct finger_data fd[3];
 }  __packed;
 
@@ -180,7 +179,7 @@ struct it7260_ts_data {
 	const struct it7260_ts_platform_data *pdata;
 	struct regulator *vdd;
 	struct regulator *avdd;
-	bool in_low_power_mode;
+	bool device_needs_wakeup;
 	bool suspended;
 	bool fw_upgrade_result;
 	bool cfg_upgrade_result;
@@ -744,31 +743,18 @@ out:
 static int it7260_ts_chip_low_power_mode(struct it7260_ts_data *ts_data,
 					const u8 sleep_type)
 {
-	const u8 cmd_sleep[] = {CMD_PWR_CTL, 0x00, sleep_type};
-	u8 dummy;
-	int ret;
+	const uint8_t cmd_sleep[] = {CMD_PWR_CTL, 0x00, sleep_type};
+	uint8_t dummy;
 
-	if (sleep_type) {
-		ret = it7260_i2c_write_no_ready_check(ts_data, BUF_COMMAND,
-					cmd_sleep, sizeof(cmd_sleep));
-		if (ret != IT_I2C_WRITE_RET)
-			dev_err(&ts_data->client->dev,
-				"Can't go to sleep or low power mode(%d) %d\n",
-				sleep_type, ret);
-		else
-			ret = 0;
-	} else {
-		ret = it7260_i2c_read_no_ready_check(ts_data, BUF_QUERY, &dummy,
+	if (sleep_type)
+		it7260_i2c_write_no_ready_check(ts_data, BUF_COMMAND, cmd_sleep,
+					sizeof(cmd_sleep));
+	else
+		it7260_i2c_read_no_ready_check(ts_data, BUF_QUERY, &dummy,
 						sizeof(dummy));
-		if (ret != IT_I2C_READ_RET)
-			dev_err(&ts_data->client->dev,
-				"Can't go to active mode %d\n", ret);
-		else
-			ret = 0;
-	}
 
 	msleep(WAIT_CHANGE_MODE);
-	return ret;
+	return 0;
 }
 
 static ssize_t sysfs_fw_upgrade_store(struct device *dev,
@@ -1240,28 +1226,18 @@ static irqreturn_t it7260_ts_threaded_handler(int irq, void *devid)
 		 * schedule a work that tells the pm core to relax once the CPU
 		 * cores are up.
 		 */
-		if ((pt_data.flags & PD_FLAGS_DATA_TYPE_BITS) ==
-				PD_FLAGS_IDLE_TO_ACTIVE &&
-				pt_data.gesture_id == 0) {
+		if (ts_data->device_needs_wakeup) {
 			pm_stay_awake(&ts_data->client->dev);
 			input_report_key(input_dev, KEY_WAKEUP, 1);
 			input_sync(input_dev);
 			input_report_key(input_dev, KEY_WAKEUP, 0);
 			input_sync(input_dev);
 			schedule_work(&ts_data->work_pm_relax);
-		} else {
-			dev_dbg(&ts_data->client->dev,
-				"Ignore the touch data\n");
+			return IRQ_HANDLED;
 		}
-		return IRQ_HANDLED;
 	}
 
-	/*
-	 * Check if touch data also includes any palm gesture or not.
-	 * If palm gesture is detected, then send the keycode parsed
-	 * from the DT.
-	 */
-	palm_detected = pt_data.gesture_id & PD_PALM_FLAG_BIT;
+	palm_detected = pt_data.palm & PD_PALM_FLAG_BIT;
 	if (palm_detected && ts_data->pdata->palm_detect_en) {
 		input_report_key(input_dev,
 				ts_data->pdata->palm_detect_keycode, 1);
@@ -2108,7 +2084,7 @@ static int it7260_ts_resume(struct device *dev)
 	int retval;
 
 	if (device_may_wakeup(dev)) {
-		if (ts_data->in_low_power_mode) {
+		if (ts_data->device_needs_wakeup) {
 			/* Set active current for the avdd regulator */
 			if (ts_data->pdata->avdd_lpm_cur) {
 				retval = reg_set_optimum_mode_check(
@@ -2119,7 +2095,7 @@ static int it7260_ts_resume(struct device *dev)
 					retval);
 			}
 
-			ts_data->in_low_power_mode = false;
+			ts_data->device_needs_wakeup = false;
 			disable_irq_wake(ts_data->client->irq);
 		}
 		return 0;
@@ -2154,13 +2130,10 @@ static int it7260_ts_suspend(struct device *dev)
 	}
 
 	if (device_may_wakeup(dev)) {
-		if (!ts_data->in_low_power_mode) {
+		if (!ts_data->device_needs_wakeup) {
 			/* put the device in low power idle mode */
-			retval = it7260_ts_chip_low_power_mode(ts_data,
+			it7260_ts_chip_low_power_mode(ts_data,
 						PWR_CTL_LOW_POWER_MODE);
-			if (retval)
-				dev_err(dev, "Can't go to low power mode %d\n",
-						retval);
 
 			/* Set lpm current for avdd regulator */
 			if (ts_data->pdata->avdd_lpm_cur) {
@@ -2172,7 +2145,7 @@ static int it7260_ts_suspend(struct device *dev)
 						retval);
 			}
 
-			ts_data->in_low_power_mode = true;
+			ts_data->device_needs_wakeup = true;
 			enable_irq_wake(ts_data->client->irq);
 		}
 		return 0;

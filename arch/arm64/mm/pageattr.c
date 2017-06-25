@@ -52,10 +52,7 @@ static int change_memory_common(unsigned long addr, int numpages,
 	}
 
 	if (!IS_ENABLED(CONFIG_FORCE_PAGES)) {
-		if (start < MODULES_VADDR || start >= MODULES_END)
-			return -EINVAL;
-
-		if (end < MODULES_VADDR || end >= MODULES_END)
+		if (!is_module_address(start) || !is_module_address(end - 1))
 			return -EINVAL;
 	}
 
