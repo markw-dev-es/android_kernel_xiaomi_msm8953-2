@@ -14,9 +14,9 @@
 
 /dts-v1/;
 
-#include "msm8953.dtsi"
+#include "markw/msm8953.dtsi"
 #include "msm8953-qrd-wt88553.dtsi"
-#include "msm8953-audio-mtp.dtsi"
+#include "markw/msm8953-audio-mtp.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSMTITANIUM QRD WT88553";
@@ -27,9 +27,9 @@
 / {
 	qrd_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "MARKW-qrd-Coslight-4v4-4000mah.dtsi"
-		#include "MARKW-qrd-Feimaotui-4v4-4000mah.dtsi"
-		#include "MARKW-qrd-Default-4v4-4000mah.dtsi"
+		#include "markw/MARKW-qrd-Coslight-4v4-4000mah.dtsi"
+		#include "markw/MARKW-qrd-Feimaotui-4v4-4000mah.dtsi"
+		#include "markw/MARKW-qrd-Default-4v4-4000mah.dtsi"
 
 	};
 };

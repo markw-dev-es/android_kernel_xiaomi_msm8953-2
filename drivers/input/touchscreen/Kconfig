@@ -547,6 +547,32 @@ config TOUCHSCREEN_EDT_FT5X06
 	  To compile this driver as a module, choose M here: the
 	  module will be called edt-ft5x06.
 
+config TOUCHSCREEN_FT5435
+	tristate "FocalTech touchscreens"
+	depends on I2C
+	help
+	  Say Y here if you have a ft5435 touchscreen.
+	  Ft5435 controllers are multi touch controllers which can
+	  report 5 touches at a time.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ft5435_ts.
+
+config TOUCHSCREEN_IST3038C
+	tristate "imagies touchscreens"
+	depends on I2C
+	help
+	  Say Y here if you have a ist3038c touchscreen.
+	  Ft5x06 controllers are multi touch controllers which can
+	  report 5 touches at a time.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ist3038c_ts.
+
 config TOUCHSCREEN_MIGOR
 	tristate "Renesas MIGO-R touchscreen"
 	depends on SH_MIGOR && I2C
@@ -871,7 +897,6 @@ config TOUCHSCREEN_TSC2005
         depends on SPI_MASTER
         help
           Say Y here if you have a TSC2005 based touchscreen.
-
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
@@ -995,6 +1020,16 @@ config TOUCHSCREEN_FT5X06_GESTURE
 
          If unsure, say N.
 
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
+	bool "Synaptics DSX firmware update extra sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
+	help
+	  Say Y here to enable support for extra sysfs attributes
+	  supporting firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
+
+	  If unsure, say N.
+
 config SECURE_TOUCH
 	bool "Secure Touch"
 	depends on (TOUCHSCREEN_SYNAPTICS_I2C_RMI4 || \
@@ -1002,6 +1037,16 @@ config SECURE_TOUCH
 	  TOUCHSCREEN_ATMEL_MAXTOUCH_TS)
 	help
 	  Say Y here to enable Secure Touch in supported drivers.
+
+	  If unsure, say N.
+
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
+	bool "Synaptics DSX firmware update extra sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
+	help
+	  Say Y here to enable support for extra sysfs attributes
+	  supporting firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
 
 	  If unsure, say N.
 
@@ -1115,6 +1160,20 @@ config TOUCHSCREEN_MAXIM_STI
 	  To compile this driver as a module, choose M here: the
 	  module will be called maxim_sti.
 
+
+config TOUCHSCREEN_STATE_NOTIFIER
+	bool "Notify screen state to touch driver"
+	depends on FB_MSM_MDSS
+	default y
+	help
+	  Report the current screen state (Active/Suspended) to kernel
+	  space. This could be used by another kernel (and user) space
+	  drivers to handle some simple tasks depending on the device's
+	  current state.
+
+	  Note that State Notifier uses 5 seconds delay (by default)
+	  before swithcing to STATE_SUSPEND.
+
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 
 config TOUCHSCREEN_FT5346
@@ -1128,4 +1187,5 @@ config TOUCHSCREEN_ATMEL308U
 	depends on I2C
 
 source "drivers/input/touchscreen/Atmel308U/Kconfig"
+
 endif

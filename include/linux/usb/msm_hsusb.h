@@ -123,7 +123,6 @@ enum msm_usb_phy_type {
 #define IDEV_CHG_MAX	1500
 #define IUNIT		100
 #define IDEV_HVDCP_CHG_MAX	1800
-#define IDEV_CHG_MIN 500
 
 /**
  * Different states involved in USB charger detection.
@@ -600,6 +599,8 @@ struct msm_hsic_host_platform_data {
 
 	/* gpio used to resume peripheral */
 	unsigned resume_gpio;
+	int *tlmm_init_seq;
+	int tlmm_seq_count;
 
 	/*swfi latency is required while driving resume on to the bus */
 	u32 swfi_latency;
@@ -636,6 +637,7 @@ void msm_bam_usb_host_notify_on_resume(void);
 void msm_bam_hsic_host_notify_on_resume(void);
 bool msm_bam_hsic_host_pipe_empty(void);
 bool msm_usb_bam_enable(enum usb_ctrl ctrl, bool bam_enable);
+int msm_do_bam_disable_enable(enum usb_ctrl ctrl);
 #else
 static inline void msm_bam_set_usb_host_dev(struct device *dev) {}
 static inline void msm_bam_set_hsic_host_dev(struct device *dev) {}
@@ -649,6 +651,7 @@ static inline bool msm_usb_bam_enable(enum usb_ctrl ctrl, bool bam_enable)
 {
 	return true;
 }
+int msm_do_bam_disable_enable(enum usb_ctrl ctrl) { return true; }
 #endif
 #ifdef CONFIG_USB_CI13XXX_MSM
 void msm_hw_soft_reset(void);

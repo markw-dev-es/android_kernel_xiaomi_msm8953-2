@@ -2642,6 +2642,7 @@ static int mxt_check_reg_init(struct mxt_data *data)
 {
 	struct device *dev = &data->client->dev;
 	int ret;
+	u8 tp_color;
 	u32 k = 0;
 
 	bool is_recheck = false, use_default_cfg = false;
@@ -5344,9 +5345,11 @@ static int mxt_initialize_input_device(struct mxt_data *data)
 
 	if (data->pdata->input_name) {
 		input_dev->name = data->pdata->input_name;
+		dev_dbg(dev, "MXT name: %s", input_dev->name);
 	} else {
 		input_dev->name = "atmel-maxtouch";
 	}
+	dev_dbg(dev, "MXT name: %s", input_dev->name);
 
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = dev;
@@ -5478,7 +5481,9 @@ static int fb_notifier_cb(struct notifier_block *self,
 
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && mxt_data) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK) {
+		if (*blank == FB_BLANK_UNBLANK
+                || *blank == FB_BLANK_NORMAL
+                || *blank == FB_BLANK_VSYNC_SUSPEND) {
 			dev_dbg(&mxt_data->client->dev, "##### UNBLANK SCREEN #####\n");
 			mxt_input_enable(mxt_data->input_dev);
 #ifdef TOUCH_WAKEUP_EVENT_RECORD

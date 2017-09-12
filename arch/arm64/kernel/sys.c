@@ -2,7 +2,6 @@
  * AArch64-specific system calls implementation
  *
  * Copyright (C) 2012 ARM Ltd.
- * Copyright (C) 2017 XiaoMi, Inc.
  * Author: Catalin Marinas <catalin.marinas@arm.com>
  *
  * This program is free software; you can redistribute it and/or modify

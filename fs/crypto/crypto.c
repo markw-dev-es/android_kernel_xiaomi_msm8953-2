@@ -25,6 +25,7 @@
 #include <linux/scatterlist.h>
 #include <linux/ratelimit.h>
 #include <linux/dcache.h>
+#include <linux/namei.h>
 #include "fscrypt_private.h"
 
 static unsigned int num_prealloc_crypto_pages = 32;
@@ -325,24 +326,24 @@ EXPORT_SYMBOL(fscrypt_decrypt_page);
  */
 static int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
-	struct inode *dir = d_inode(dentry->d_parent);
-	struct fscrypt_info *ci = dir->i_crypt_info;
+	struct dentry *dir;
 	int dir_has_key, cached_with_key;
 
-	if (!dir->i_sb->s_cop->is_encrypted(dir))
-		return 0;
+	if (flags & LOOKUP_RCU)
+		return -ECHILD;
 
-	if (ci && ci->ci_keyring_key &&
-	    (ci->ci_keyring_key->flags & ((1 << KEY_FLAG_INVALIDATED) |
-					  (1 << KEY_FLAG_REVOKED) |
-					  (1 << KEY_FLAG_DEAD))))
-		ci = NULL;
+	dir = dget_parent(dentry);
+	if (!d_inode(dir)->i_sb->s_cop->is_encrypted(d_inode(dir))) {
+		dput(dir);
+		return 0;
+	}
 
 	/* this should eventually be an flag in d_flags */
 	spin_lock(&dentry->d_lock);
 	cached_with_key = dentry->d_flags & DCACHE_ENCRYPTED_WITH_KEY;
 	spin_unlock(&dentry->d_lock);
-	dir_has_key = (ci != NULL);
+	dir_has_key = (d_inode(dir)->i_crypt_info != NULL);
+	dput(dir);
 
 	/*
 	 * If the dentry was cached without the key, and it is a

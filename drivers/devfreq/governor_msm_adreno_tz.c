@@ -92,14 +92,15 @@ static ssize_t gpu_load_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	unsigned long sysfs_busy_perc;
+	unsigned long sysfs_busy_perc = 0;
 	/*
 	 * Average out the samples taken since last read
 	 * This will keep the average value in sync with
 	 * with the client sampling duration.
 	 */
 	spin_lock(&sample_lock);
-	sysfs_busy_perc = (acc_relative_busy * 100) / acc_total;
+	if (acc_total)
+		sysfs_busy_perc = (acc_relative_busy * 100) / acc_total;
 
 	/* Reset the parameters */
 	acc_total = 0;
@@ -337,11 +338,6 @@ static int tz_init(struct devfreq_msm_adreno_tz_data *priv,
 	return ret;
 }
 
-#ifdef CONFIG_ADRENO_IDLER
-extern int adreno_idler(struct devfreq_dev_status stats, struct devfreq *devfreq,
-		 unsigned long *freq);
-#endif
-
 static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 				u32 *flag)
 {
@@ -358,21 +354,8 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		pr_err(TAG "get_status failed %d\n", result);
 		return result;
 	}
-	/* Prevent overflow */
-	if (stats.busy_time >= (1 << 24) || stats.total_time >= (1 << 24)) {
-		stats.busy_time >>= 7;
-		stats.total_time >>= 7;
-	}
 
 	*freq = stats.current_frequency;
-
-	#ifdef CONFIG_ADRENO_IDLER
-	if (adreno_idler(stats, devfreq, freq)) {
-		/* adreno_idler has asked to bail out now */
-		return 0;
-	}
-	#endif
-
 	priv->bin.total_time += stats.total_time;
 	priv->bin.busy_time += stats.busy_time;
 

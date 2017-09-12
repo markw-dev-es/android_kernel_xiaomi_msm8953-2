@@ -4,7 +4,6 @@
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
  * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2017 XiaoMi, Inc.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -422,6 +421,7 @@ struct ufs_clk_gating {
 	struct device_attribute enable_attr;
 	bool is_enabled;
 	int active_reqs;
+	struct workqueue_struct *ungating_workq;
 };
 
 /* Hibern8 state  */
@@ -539,6 +539,8 @@ struct debugfs_files {
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 	struct dentry *reset_controller;
+	struct dentry *err_state;
+	bool err_occurred;
 #ifdef CONFIG_UFS_FAULT_INJECTION
 	struct dentry *err_inj_scenario;
 	struct dentry *err_inj_stats;

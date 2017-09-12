@@ -12,10 +12,10 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8953-qrd.dtsi"
-#include "dsi-panel-nt35521s-ebbg-720p-video.dtsi"
-#include "dsi-panel-nt35596-ebbg-1080p-video.dtsi"
-#include "dsi-panel-r63350-tianma-1080p-video.dtsi"
+#include "markw/msm8953-qrd.dtsi"
+#include "markw/dsi-panel-nt35521s-ebbg-720p-video.dtsi"
+#include "markw/dsi-panel-nt35596-ebbg-1080p-video.dtsi"
+#include "markw/dsi-panel-r63350-tianma-1080p-video.dtsi"
 
 &spmi_bus {
 	qcom,pmi8950@3 {

@@ -17,15 +17,6 @@ config SUSPEND_FREEZER
 	  done, no tasks are frozen for suspend to RAM/standby.
 
 	  Turning OFF this setting is NOT recommended! If in doubt, say Y.
-config SUSPEND_SKIP_SYNC
-	bool "Skip kernel's sys_sync() on suspend to RAM/standby"
-	depends on SUSPEND
-	depends on EXPERT
-	help
-	  Skip the kernel sys_sync() before freezing user processes.
-	  Some systems prefer not to pay this cost on every invocation
-	  of suspend, or they are content with invoking sync() from
-	  user-space before invoking suspend. Say Y if that's your case.
 
 config WAKELOCK
 	bool "Android's method of preventing suspend"
@@ -334,36 +325,3 @@ config SUSPEND_TIME
 	  Prints the time spent in suspend in the kernel log, and
 	  keeps statistics on the time spent in suspend in
 	  /sys/kernel/debug/suspend_time
-
-config SUSPEND_TIME_TIMEKEEPING
-	bool "get suspend time from timekeeping"
-	default y if SUSPEND_TIME
-	---help---
-	  Get the suspend time in suspend from timekeeping for the archs
-	  that don't support persistent clock.
-
-config PM_SYNC_BEFORE_SUSPEND
-	bool "Sync file systems before suspend"
-	depends on PM
-	default n
-
-config QUICK_WAKEUP
-	bool "Quick wakeup"
-	depends on SUSPEND
-	default y
-	---help---
-	  Allow kernel driver to do periodic jobs without resuming the full system
-	  This option can increase battery life on android powered smartphone.
-
-config POWERSUSPEND
-	bool "Power suspend"
-	default y
-	---help---
-	  Call early suspend handlers when the user requested sleep state
-	  changes.
-
-config POWERSUSPEND_DEBUG
-	bool "Powersuspend driver debugging code"
-	depends on POWERSUSPEND
-	help
-	  Output debugging info in dmesg

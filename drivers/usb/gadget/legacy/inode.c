@@ -309,7 +309,7 @@ nonblock:
 	// case STATE_EP_DISABLED:		/* "can't happen" */
 	// case STATE_EP_READY:			/* "can't happen" */
 	default:				/* error! */
-		pr_debug ("%s: ep %p not available, state %d\n",
+		pr_debug ("%s: ep %pK not available, state %d\n",
 				shortname, epdata, epdata->state);
 		// FALLTHROUGH
 	case STATE_EP_UNBOUND:			/* clean disconnect */
@@ -654,7 +654,6 @@ fail:
 				   GFP_KERNEL);
 		if (!priv->iv) {
 			kfree(priv);
-			value = -ENOMEM;
 			goto fail;
 		}
 	}
@@ -1019,11 +1018,8 @@ ep0_read (struct file *fd, char __user *buf, size_t len, loff_t *ptr)
 			struct usb_ep		*ep = dev->gadget->ep0;
 			struct usb_request	*req = dev->req;
 
-			if ((retval = setup_req (ep, req, 0)) == 0) {
-				spin_unlock_irq (&dev->lock);
-				retval = usb_ep_queue (ep, req, GFP_KERNEL);
-				spin_lock_irq (&dev->lock);
-			}
+			if ((retval = setup_req (ep, req, 0)) == 0)
+				retval = usb_ep_queue (ep, req, GFP_ATOMIC);
 			dev->state = STATE_DEV_CONNECTED;
 
 			/* assume that was SET_CONFIGURATION */
@@ -1554,11 +1550,8 @@ delegate:
 							w_length);
 				if (value < 0)
 					break;
-
-				spin_unlock (&dev->lock);
 				value = usb_ep_queue (gadget->ep0, dev->req,
-							GFP_KERNEL);
-				spin_lock (&dev->lock);
+							GFP_ATOMIC);
 				if (value < 0) {
 					clean_req (gadget->ep0, dev->req);
 					break;
@@ -1581,14 +1574,11 @@ delegate:
 	if (value >= 0 && dev->state != STATE_DEV_SETUP) {
 		req->length = value;
 		req->zero = value < w_length;
-
-		spin_unlock (&dev->lock);
-		value = usb_ep_queue (gadget->ep0, req, GFP_KERNEL);
+		value = usb_ep_queue (gadget->ep0, req, GFP_ATOMIC);
 		if (value < 0) {
 			DBG (dev, "ep_queue --> %d\n", value);
 			req->status = 0;
 		}
-		return value;
 	}
 
 	/* device stalls when value < 0 */
@@ -1950,7 +1940,7 @@ dev_config (struct file *fd, const char __user *buf, size_t len, loff_t *ptr)
 
 fail:
 	spin_unlock_irq (&dev->lock);
-	pr_debug ("%s: %s fail %Zd, %p\n", shortname, __func__, value, dev);
+	pr_debug ("%s: %s fail %Zd, %pK\n", shortname, __func__, value, dev);
 	kfree (dev->buf);
 	dev->buf = NULL;
 	return value;
